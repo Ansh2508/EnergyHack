@@ -9,6 +9,7 @@ Python; the JSON only describes verified facts.
 from __future__ import annotations
 
 import json
+import os
 import math
 
 import duckdb
@@ -143,10 +144,48 @@ def assert_facts_consistent(facts: dict, cause, loss) -> None:
 
 
 def write_facts(facts: dict, path: str) -> None:
+    # preserve the independent Slice-3.5 loss_cross_check block across re-runs
+    if "loss_cross_check" not in facts and os.path.exists(path):
+        try:
+            with open(path, encoding="utf-8") as _fh:
+                _prev = json.load(_fh)
+            if isinstance(_prev, dict) and "loss_cross_check" in _prev:
+                facts = {**facts, "loss_cross_check": _prev["loss_cross_check"]}
+        except (OSError, ValueError):
+            pass
     with open(path, "w", encoding="utf-8", newline="\n") as fh:
         json.dump(facts, fh, indent=2, ensure_ascii=True)
         fh.write("\n")
 
+
+
+def attach_cross_check(path: str, inverter_id: str, window_start: str,
+                       window_end: str, tariff_eur_per_kwh: float = 0.115) -> dict:
+    """Compute the independent XGBoost weather-model loss and persist it into
+    verified_facts.json as result.loss_cross_check. Backend-only, never in the
+    decision path. Recomputes agreement_pct against the current causalimpact euro."""
+    from src.expected_power import train_expected_power, xgb_lost_kwh
+    iid = canonical_inverter_id(inverter_id) or str(inverter_id)
+    model, res = train_expected_power(iid)
+    kwh = xgb_lost_kwh(model, iid, window_start, window_end)
+    eur = round(kwh * tariff_eur_per_kwh, 2)
+    with open(path, encoding="utf-8") as fh:
+        facts = json.load(fh)
+    ci_eur = float(facts.get("loss", {}).get("euros_lost", 0.0)) or eur
+    lo, hi = sorted((eur, ci_eur))
+    agreement = round(100.0 * lo / hi, 1) if hi > 0 else 0.0
+    facts["loss_cross_check"] = {
+        "method": "xgboost_weather",
+        "lost_kwh": round(float(kwh), 1),
+        "euros_lost": eur,
+        "val_r2": round(float(res.val_r2), 4),
+        "causalimpact_euros": round(ci_eur, 2),
+        "agreement_pct": agreement,
+    }
+    with open(path, "w", encoding="utf-8", newline="\n") as fh:
+        json.dump(facts, fh, indent=2, ensure_ascii=True)
+        fh.write("\n")
+    return facts["loss_cross_check"]
 
 def _detection_stats(det: pd.DataFrame, iid, ws, we) -> dict:
     w = det[(det["inverter_id"] == iid) & (det["date"] >= ws) & (det["date"] <= we)]

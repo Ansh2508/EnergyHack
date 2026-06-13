@@ -109,3 +109,28 @@ proven by the Slice-2 tests still passing.
 | SkillRL (arXiv:2602.08234) | curtailment guard = lesson-from-failure skill; terminates early | test_agent_curtailment_short_circuits, test_agent_healthy_short_circuits |
 | Validate-before-show (arXiv:2606.01513) | trace + work order computed ONCE from the same verdict/loss | test_trace_matches_result, test_quantify_runs_once |
 | Brodersen 2015 / RdTools | engine reused unchanged via diagnose/quantify nodes | the 7 Slice-2 tests still green |
+
+## Expected-power model (XGBoost) - Slice 3.5 (independent loss cross-check; NOT in the agent path)
+Phase-0 facts: xgboost 3.2.0, shap 0.49.1 (available). Year-1 = 2017 (105,121 rows; first FULL
+calendar year - 2016 is a 24-row Dec-31 tail). Native-parquet columns: irradiance =
+'Plant / Irradiation_average (W/m2)', sun_altitude = 'Plant / Altitude', module_temp + ambient_temp
+= 'Temperature Sensor / Module|Ambient', DV curtailment. Cross-MODULE-TYPE comparison set (the hero
+is one of only two full-size Module Type 6 units, so same-type siblings are not used here):
+  INV 01.05.029 28.8 kWp (hero), INV 01.01.001 30.6 (fleet baseline), INV 01.03.018 30.0,
+  INV 01.07.044 28.2.
+
+Method (IEA PVPS Task 13 convention; web-confirmed):
+- TRAIN ONLY ON CLEAN POINTS. Remove night/low-irradiance (sun_altitude<=0 OR irradiance<50 W/m2),
+  curtailment (DV<100, reusing the Slice-1 mask logic), inverter clipping (P_AC >= 98% of rated kW),
+  and zero/fault rows (P_AC<=0.1 kW while producing). Training on contaminated data would teach the
+  model dead/throttled behaviour as "normal". (IEA-PVPS T13 Performance-Loss-Rate report; Sandia PVPMC.)
+- Features = [irradiance, module_temp, ambient_temp, sun_altitude]; target = instantaneous P_AC (kW).
+  Irradiance + module temp dominate (consensus).
+- Residual (actual - expected) is a MIXTURE (thermal/spectral/electrical + soiling + degradation +
+  outage + clipping + curtailment). NOT all residual is a fault. The loss cross-check integrates the
+  POSITIVE shortfall (expected-actual) ONLY over the already-detected Slice-1/2 fault window, and only
+  over clean-weather producing intervals.
+- XGBoost weaknesses are explainability + false alarms; both mitigated: emit feature_importances_
+  (gain) and mean|SHAP|; and this model NEVER raises an alarm - it only cross-checks an already
+  detected event. Shallow trees (max_depth 5), early stopping on a time-held-out clean split.
+Refs: IEA-PVPS Task 13 (Assessment of Performance Loss Rate of PV Power Systems, 2021); Sandia PVPMC.

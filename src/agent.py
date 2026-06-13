@@ -218,6 +218,11 @@ def issue_work_order(state: AgentState) -> dict:
         state["inverter_id"], state["window_start"], state["window_end"],
         verdict=state["verdict"], loss=state["loss"])
     build_facts.write_facts(facts, OUT_FACTS)  # keep verified_facts.json in sync with this run
+    try:  # durable independent XGBoost cross-check (backend-only, not in decision path)
+        build_facts.attach_cross_check(
+            OUT_FACTS, state["inverter_id"], state["window_start"], state["window_end"])
+    except Exception as _cc_err:  # never let the cross-check break the work order
+        print(f"cross-check skipped: {_cc_err}")
     val = facts.get("validation") or {}
     matched = bool(val.get("ticket_matched"))
     act = facts.get("action") or {}
@@ -292,12 +297,22 @@ def run_investigation(inverter_id: str, window_start: str, window_end: str) -> A
 
 def _write_agent_run(state: AgentState) -> None:
     os.makedirs("outputs", exist_ok=True)
+    result = dict(state.get("facts") or {})
+    # carry the durable XGBoost cross-check that issue_work_order wrote to verified_facts.json
+    if "loss_cross_check" not in result and os.path.exists(OUT_FACTS):
+        try:
+            with open(OUT_FACTS, encoding="utf-8") as _vf:
+                _facts = json.load(_vf)
+            if isinstance(_facts, dict) and "loss_cross_check" in _facts:
+                result["loss_cross_check"] = _facts["loss_cross_check"]
+        except (OSError, ValueError):
+            pass
     payload = {
         "inverter_id": state["inverter_id"],
         "window": {"start": state["window_start"], "end": state["window_end"]},
         "status": state["status"],
         "trace": state["trace"],
-        "result": state.get("facts") or {},
+        "result": result,
     }
     with open(OUT_AGENT_RUN, "w", encoding="utf-8", newline="\n") as fh:
         json.dump(payload, fh, indent=2, ensure_ascii=True)
