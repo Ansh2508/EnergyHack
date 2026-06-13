@@ -229,6 +229,32 @@ svg{display:block;width:100%;height:auto;overflow:visible}
 .mathcard .mh{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--ink);margin-bottom:8px}
 .mathcard .mb{font-family:var(--mono);font-size:12.5px;color:var(--muted);line-height:1.8}
 .mathnote{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:4px}
+
+/* --- Run 12 enhancements --- */
+.clustertip{position:fixed;display:none;font-family:var(--mono);font-size:11px;color:var(--ink);background:var(--paper);border:1px solid var(--hair);border-radius:4px;padding:6px 10px;z-index:100;pointer-events:none;line-height:1.5;max-width:300px}
+.clustercallout{display:none;border:1px solid var(--hair);border-radius:6px;background:var(--paper);padding:16px 20px;text-align:left;margin-top:10px}
+.clustercallout .mh{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--fault);margin-bottom:8px}
+.clustercallout .mb{font-family:var(--mono);font-size:12.5px;color:var(--muted);line-height:1.8}
+.loopbtn{font-family:var(--mono);font-size:12px;color:var(--ink);background:var(--paper);border:1px solid var(--hair);border-radius:6px;padding:8px 16px;cursor:pointer;width:fit-content;margin-bottom:6px;transition:border-color .2s ease}
+.loopbtn:hover{border-color:var(--ink)}
+#graph-collapse{opacity:0}
+#graph-collapse.open{opacity:1;transition:opacity .2s ease}
+.cipanel{margin:14px 0 4px}
+.cilbl{font-family:var(--mono);font-size:11px;fill:var(--ink)}
+.citick{font-family:var(--mono);font-size:10px;fill:var(--muted)}
+
+/* Run 12b: steps collapse + why-agree panel */
+#steps-collapse-wrap{position:relative;overflow:hidden;transition:max-height 250ms ease}
+#steps-collapse-wrap.steps-collapsed::after{content:"";position:absolute;bottom:0;left:0;right:0;height:64px;background:linear-gradient(transparent,var(--paper));pointer-events:none}
+#steps-toggle{display:none;border:1px solid var(--hair);background:var(--paper);font-family:var(--mono);font-size:12px;color:var(--ink);padding:10px 20px;cursor:pointer;width:100%;text-align:left;margin-top:0}
+#steps-toggle:hover{border-color:var(--ink)}
+@media(prefers-reduced-motion:reduce){#steps-collapse-wrap{transition:none}}
+.whycard{border:1px solid var(--hair);border-radius:6px;background:var(--paper);padding:20px 24px;margin:0 0 4px}
+.whya{font-family:var(--sans);font-size:14px;color:var(--ink);line-height:1.7;max-width:64ch}
+.whyh{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--ink);margin:16px 0 8px}
+.whyb{font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.8}
+.whycall{font-family:var(--mono);font-size:11px;color:var(--ink);margin:16px 0 4px}
+.whyfoot{font-family:var(--mono);font-size:10px;color:var(--muted);text-align:center;line-height:1.5}
 </style>
 <script src="config.local.js"></script>
 </head>
@@ -265,7 +291,8 @@ svg{display:block;width:100%;height:auto;overflow:visible}
   <hr class="rule">
   <div class="trace">
     <div class="lbl">Step by step - what the agent checked, in order</div>
-    <div id="steps"></div>
+    <div id="steps-collapse-wrap"><div id="steps"></div></div>
+    <button id="steps-toggle">&#9654;&nbsp; Show full agent loop &nbsp;(7 steps)</button>
   </div>
 
   <div id="xgbzone" class="xgbzone">
@@ -288,6 +315,23 @@ svg{display:block;width:100%;height:auto;overflow:visible}
       <div class="peuro" id="euroB"></div>
       <div class="psub">deterministic</div>
     </div>
+  </div>
+  <div class="cipanel post">
+    <svg viewBox="0 0 480 66" style="display:block;width:100%;max-width:480px" role="img" aria-label="Confidence interval overlap">
+      <text class="cilbl" x="12" y="12">EUR 202 (ML) falls inside the Bayesian interval - the estimates agree</text>
+      <line x1="12" y1="34" x2="468" y2="34" stroke="var(--hair)" stroke-width="1"/>
+      <rect x="107.8" y="28" width="314.6" height="12" fill="var(--healthy)" fill-opacity="0.2"/>
+      <line x1="262.8" y1="25" x2="262.8" y2="43" stroke="var(--healthy)" stroke-width="2"/>
+      <circle cx="294.7" cy="34" r="5" fill="var(--fault)"/>
+      <text class="citick" x="107.8" y="50" text-anchor="middle">EUR 161</text>
+      <text class="citick" x="259" y="50" text-anchor="end">EUR 195</text>
+      <text class="citick" x="298" y="50" text-anchor="start">EUR 202</text>
+      <text class="citick" x="422.4" y="50" text-anchor="middle">EUR 230</text>
+      <rect x="250" y="58" width="10" height="8" fill="var(--healthy)" fill-opacity="0.35"/>
+      <text class="citick" x="264" y="65">Bayesian CI (95%)</text>
+      <circle cx="374" cy="62" r="4" fill="var(--fault)"/>
+      <text class="citick" x="382" y="65">XGBoost</text>
+    </svg>
   </div>
   <div class="agree post">
     <b id="agree"></b>
@@ -329,11 +373,21 @@ svg{display:block;width:100%;height:auto;overflow:visible}
   <table class="triage"><thead><tr><th>Rank</th><th>Inverter</th><th>Events</th><th>Loss (EUR)</th><th>kWh</th><th>Signal</th><th>Action</th></tr></thead><tbody id="triage-body"></tbody></table>
   <div style="margin:14px 0"><button class="btnsm" id="triage-toggle"></button></div>
   <div class="lbl" style="margin:24px 0 8px">Fault timeline - sustained-zero outage spans &middot; 2017&ndash;2026</div>
+  <div class="lbl" style="margin:10px 0 6px">Filter by period</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+    <button class="btnsm sel" id="pf-all">All</button>
+    <button class="btnsm" id="pf-1">2017-2020</button>
+    <button class="btnsm" id="pf-2">2021-2023</button>
+    <button class="btnsm" id="pf-3">2024-2026</button>
+    <button class="btnsm" id="pf-4">Last 4 weeks</button>
+  </div>
   <div style="display:flex;gap:12px;margin-bottom:12px">
     <button class="btnsm sel" id="tl-top20">Top 20</button>
     <button class="btnsm" id="tl-all">All</button>
   </div>
   <svg id="timeline-svg" viewBox="0 0 680 300" role="img" aria-label="Fault timeline"></svg>
+  <div id="cluster-callout" class="clustercallout"></div>
+  <div id="cluster-tip" class="clustertip" aria-hidden="true"></div>
   <div class="lbl" style="margin:24px 0 8px">How the agent prices a fault</div>
   <div class="mathgrid">
     <div class="mathcard">
@@ -585,7 +639,10 @@ function streamSteps(TR){
     }, i*700);
   });
 }
-function revealPost(){ document.querySelectorAll(".post").forEach(e=>e.classList.add("go")); }
+function revealPost(){ document.querySelectorAll(".post").forEach(e=>e.classList.add("go"));
+  const w=document.getElementById("steps-collapse-wrap"), b=document.getElementById("steps-toggle");
+  if(w){ w.style.maxHeight="200px"; w.classList.add("steps-collapsed"); }
+  if(b) b.style.display="block"; }
 function playInvestigation(){
   document.getElementById("report").classList.add("in");
   startChart();
@@ -850,7 +907,9 @@ let TL_MODE="top20";
 function redrawTimeline(mode){
   TL_MODE=mode||TL_MODE;
   const svg=document.getElementById("timeline-svg"); if(!svg) return;
-  const agg=Object.entries(SEVERITY_MAP).map(([id,x])=>({id,euros:x.euros})).sort((a,b)=>b.euros-a.euros);
+  const _rk=FLEET.ranked.filter(e=>_inPeriod(e.window.start));   // ENH1: period-filtered copy
+  const _sev={}; for(const e of _rk){ if(!_sev[e.inverter_id]) _sev[e.inverter_id]={euros:0}; _sev[e.inverter_id].euros+=e.euros; }
+  const agg=Object.entries(_sev).map(([id,x])=>({id,euros:x.euros})).sort((a,b)=>b.euros-a.euros);
   const ids=(TL_MODE==="top20"?agg.slice(0,20):agg).map(r=>r.id);
   const rowH=14,L=110,R=20,W=680,pw=W-L-R,topPad=6,N=ids.length,H=rowH*N+40;
   const t0=Date.parse(FLEET.data_span.start),t1=Date.parse(FLEET.data_span.end);
@@ -859,11 +918,11 @@ function redrawTimeline(mode){
   for(let i=0;i<=N;i++){ const y=(topPad+i*rowH).toFixed(1);
     s+=`<line x1="${L}" y1="${y}" x2="${L+pw}" y2="${y}" stroke="var(--hair)" stroke-width="1" opacity="0.4"/>`; }
   for(const d of SNOW_DATES){ const x=X(d); if(x>=L&&x<=L+pw)
-    s+=`<rect x="${(x-2).toFixed(1)}" y="${topPad}" width="4" height="${rowH*N}" fill="var(--muted)" opacity="0.12"/>`; }
+    s+=`<rect class="snowband" data-cluster-date="${d}" x="${(x-2).toFixed(1)}" y="${topPad}" width="4" height="${rowH*N}" fill="var(--muted)" opacity="0.12"/>`; }
   ids.forEach((id,i)=>{
     const ry=topPad+i*rowH, hero=id==="INV 01.05.029";
     s+=`<text class="tllbl" x="${L-6}" y="${(ry+rowH/2+3).toFixed(1)}" text-anchor="end"${hero?' fill="var(--fault)"':''}>${id.replace("INV ","")}</text>`;
-    for(const e of FLEET.ranked){ if(e.inverter_id!==id) continue;
+    for(const e of _rk){ if(e.inverter_id!==id) continue;
       const x=X(e.window.start), w=Math.max(3,X(e.window.end)-x);
       s+=`<rect class="tlrect" data-r="${i}" x="${x.toFixed(1)}" y="${(ry+1.5).toFixed(1)}" width="${w.toFixed(1)}" height="${rowH-3}" rx="2" fill="var(--fault)" fill-opacity="0.75"><title>${id} ${e.window.start}..${e.window.end} ${e.n_fault_days}d EUR ${Math.round(e.euros)}</title></rect>`; }
   });
@@ -875,6 +934,7 @@ function redrawTimeline(mode){
   const rects=[...svg.querySelectorAll(".tlrect")];
   if(RM){ rects.forEach(r=>r.classList.add("go")); }
   else requestAnimationFrame(()=>rects.forEach(r=>setTimeout(()=>r.classList.add("go"), (+r.getAttribute("data-r"))*18)));
+  _wireSnowBands();
 }
 function buildFleetSection(){
   const h=document.getElementById("fleet-headline");
@@ -896,6 +956,60 @@ function buildFleetSection(){
   if(ba) ba.addEventListener("click",()=>setMode("all"));
   setMode("top20");
 }
+/* Run 12: period filter + cluster-band interactivity + steps collapse */
+let currentPeriod="all";
+const _last4wStart = new Date(Date.now() - 28*24*60*60*1000).toISOString().slice(0,10);  // live LAST 4 WEEKS cutoff
+function _inPeriod(ds){
+  if(currentPeriod==="all") return true;
+  if(currentPeriod==="last4w") return String(ds) >= _last4wStart;
+  const y=+String(ds).slice(0,4);
+  if(currentPeriod==="p1") return y>=2017 && y<=2020;
+  if(currentPeriod==="p2") return y>=2021 && y<=2023;
+  if(currentPeriod==="p3") return y>=2024 && y<=2026;
+  return true;
+}
+function _clusterInfo(date){
+  const evs=FLEET.ranked.filter(e=>e.bucket==="weather" && e.window.start===date);
+  const n=new Set(evs.map(e=>e.inverter_id)).size;
+  const eur=Math.round(evs.reduce((a,e)=>a+e.euros,0));
+  return {n,eur};
+}
+let _clusterSel=null;
+function _wireSnowBands(){
+  const tip=document.getElementById("cluster-tip");
+  document.querySelectorAll("#timeline-svg .snowband").forEach(b=>{
+    const d=b.getAttribute("data-cluster-date");
+    b.style.cursor="pointer";
+    b.addEventListener("mouseenter",()=>{ if(!tip) return; const c=_clusterInfo(d);
+      tip.innerHTML=`${d}: ${c.n} inverters down simultaneously<br>EUR ${c.eur.toLocaleString("en-US")} weather-suppressed (not dispatched)`;
+      tip.style.display="block"; });
+    b.addEventListener("mousemove",ev=>{ if(tip){ tip.style.left=(ev.clientX+12)+"px"; tip.style.top=(ev.clientY+12)+"px"; } });
+    b.addEventListener("mouseleave",()=>{ if(tip) tip.style.display="none"; });
+    b.addEventListener("click",ev=>{ ev.stopPropagation();
+      const co=document.getElementById("cluster-callout"); if(!co) return;
+      if(_clusterSel===d){ co.style.display="none"; _clusterSel=null; return; }
+      const c=_clusterInfo(d); _clusterSel=d;
+      co.innerHTML=`<div class="mh">${d} - whole-plant event</div><div class="mb">${c.n} inverters went dark on the same day.<br>EUR ${c.eur.toLocaleString("en-US")} weather-suppressed - the agent did NOT dispatch (shared cause, not a per-inverter fault).</div>`;
+      co.style.display="block"; });
+  });
+}
+function _setPeriod(p,btnId){
+  currentPeriod=p;
+  ["pf-all","pf-1","pf-2","pf-3","pf-4"].forEach(id=>{ const b=document.getElementById(id); if(b) b.classList.toggle("sel", id===btnId); });
+  redrawTimeline();
+}
+(function(){
+  [["pf-all","all"],["pf-1","p1"],["pf-2","p2"],["pf-3","p3"],["pf-4","last4w"]].forEach(([id,p])=>{
+    const b=document.getElementById(id); if(b) b.addEventListener("click",()=>_setPeriod(p,id)); });
+  const _wrap=document.getElementById("steps-collapse-wrap"), _btn=document.getElementById("steps-toggle");
+  let _stepsOpen=false;
+  if(_btn&&_wrap) _btn.addEventListener("click",()=>{ _stepsOpen=!_stepsOpen;
+    _wrap.style.maxHeight=_stepsOpen? _wrap.scrollHeight+"px":"200px";
+    _wrap.classList.toggle("steps-collapsed",!_stepsOpen);
+    _btn.innerHTML=_stepsOpen? "&#9660;&nbsp; Collapse agent loop":"&#9654;&nbsp; Show full agent loop &nbsp;(7 steps)"; });
+  document.addEventListener("click",()=>{ const co=document.getElementById("cluster-callout");
+    if(co && _clusterSel){ co.style.display="none"; _clusterSel=null; } });
+})();
 buildTiles = buildOverview;   // append-only rebind: init() builds the overview grid (no init edit)
 buildFleetSection();          // fleet section is independent of the agent run -> build now
 </script>
