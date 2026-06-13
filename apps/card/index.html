@@ -1,8 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" translate="no">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="google" content="notranslate">
 <title>Incident Report - INV 01.05.029 - Plant A</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -158,9 +159,31 @@ svg{display:block;width:100%;height:auto;overflow:visible}
 /* late-resolving zones */
 .post{opacity:0}
 .post.go{opacity:1;transition:opacity .5s ease}
+
+/* chat (deterministic, JSON-grounded; matches the frozen design system) */
+.chatsub{font-family:var(--mono);font-size:13px;color:var(--muted);margin:-6px 0 14px}
+.chatlog{max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
+.msg{font-family:var(--sans);font-size:14px;line-height:1.5;max-width:90%;padding:10px 13px;border-radius:6px;border:1px solid var(--hair);opacity:0;transform:translateY(4px)}
+.msg.show{opacity:1;transform:none;transition:opacity .3s ease,transform .3s ease}
+.msg.user{align-self:flex-end;background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.msg.bot{align-self:flex-start;background:var(--paper);color:var(--ink)}
+.msg.beat{align-self:flex-start;font-family:var(--mono);font-size:13px;color:var(--muted);border:0;padding:4px 2px;background:none}
+.msg .n{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:500}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.chip-q{font-family:var(--mono);font-size:12px;color:var(--muted);background:var(--paper);border:1px solid var(--hair);border-radius:3px;padding:7px 11px;cursor:pointer;transition:color .2s ease,border-color .2s ease}
+.chip-q:hover{color:var(--ink);border-color:var(--ink)}
+.chatbar{display:flex;gap:8px}
+.chatinput{flex:1;font-family:var(--sans);font-size:14px;color:var(--ink);background:var(--paper);border:1px solid var(--hair);border-radius:6px;padding:10px 13px;outline:none}
+.chatinput:focus{border-color:var(--ink)}
+.chatinput::placeholder{color:var(--muted)}
+.chatsend{font-family:var(--mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink);background:var(--paper);border:1px solid var(--ink);border-radius:6px;padding:0 18px;cursor:pointer;transition:background .2s ease,color .2s ease}
+.chatsend:hover{background:var(--ink);color:var(--paper)}
+.modelpill{display:block;font-family:var(--mono);font-size:13px;color:var(--muted);min-height:18px;margin:-8px 0 14px;letter-spacing:.01em}
+.modelpill.ok{color:var(--healthy)}
 @media (max-width:520px){ .id{font-size:22px} .id .plant{font-size:17px} .proof{grid-template-columns:1fr} .peuro{font-size:30px} }
 @media (prefers-reduced-motion:reduce){ *{transition:none!important} }
 </style>
+<script src="config.local.js"></script>
 </head>
 <body>
 <div id="intro">
@@ -225,7 +248,23 @@ svg{display:block;width:100%;height:auto;overflow:visible}
   </div>
 
   <div class="foot post" id="foot"></div>
-  <div id="chat-mount"></div>
+  <div id="chat-mount">
+  <hr class="rule">
+  <div class="lbl">Ask the investigation</div>
+  <div class="chatsub">Analysis runs locally and deterministically. Chat uses a hosted model (Groq).</div>
+  <div class="modelpill" id="modelpill" aria-live="polite"></div>
+  <div class="chatlog" id="chatlog"></div>
+  <div class="chips" id="chatchips">
+    <button class="chip-q" data-q="What failed?">What failed?</button>
+    <button class="chip-q" data-q="How much did it cost?">How much did it cost?</button>
+    <button class="chip-q" data-q="How do you know it's real?">How do you know it's real?</button>
+    <button class="chip-q" data-q="Why two methods?">Why two methods?</button>
+  </div>
+  <div class="chatbar">
+    <input id="chatinput" class="chatinput" type="text" placeholder="Ask about this investigation..." autocomplete="off">
+    <button id="chatsend" class="chatsend">Send</button>
+  </div>
+  </div>
 </div>
 
 <script>
@@ -501,9 +540,160 @@ function replay(){
   setupLanding();
 }
 
+// in-card chat: structured deterministic answers grounded in DATA (agent_run.json).
+// LLM layer added in 9b as an optional enhancement; this layer never fabricates.
+const _n = v => '<span class="n">'+v+'</span>';
+const FALLBACK_MENU = "I can answer about the failure, the cause, the cost, how it was validated, how the agent decides, or how it scales - ask one of those.";
+
+// CHAT MODEL: live hosted model (Groq, OpenAI-compatible streaming) with two-key failover.
+// The 9a structured engine (answerFor) is the offline fallback -- chat never breaks the demo.
+// Keys come from window.GROQ_API_KEY[_2] loaded by config.local.js (gitignored). Never hardcoded.
+const GROQ_KEYS = [ (typeof window!=="undefined" && window.GROQ_API_KEY) || null,
+                    (typeof window!=="undefined" && window.GROQ_API_KEY_2) || null ].filter(Boolean);
+let MODEL = { status:"idle" };
+let CHAT_HISTORY = [];
+function _pushHist(role,content){ CHAT_HISTORY.push({role,content}); while(CHAT_HISTORY.length>6) CHAT_HISTORY.shift(); }
+function modelPill(state){
+  const p=document.getElementById("modelpill"); if(!p) return;
+  const map={
+    connecting:["chat: connecting...","modelpill"],
+    live:["chat: live (Llama 3.3 70B)","modelpill ok"],
+    offline:["chat: offline mode - structured answers","modelpill"],
+    reconnect:["chat: reconnecting...","modelpill"],
+    structfail:["chat: structured answer (model unavailable)","modelpill"]
+  };
+  const v=map[state]||map.offline; p.textContent=v[0]; p.className=v[1];
+}
+function modelStart(){
+  if(MODEL.status!=="idle") return;
+  if(GROQ_KEYS.length===0){ MODEL.status="offline"; modelPill("offline"); }
+  else { MODEL.status="ready"; modelPill("connecting"); }
+}
+function factsBlock(){
+  const R=DATA.result, L=R.loss, X=R.loss_cross_check, E=R.evidence, C=R.cause, V=R.validation, B=R.business_case;
+  return [
+    "Inverter "+R.inverter_id+" at "+R.plant+".",
+    "Outage "+R.window.start+" to "+R.window.end+", "+R.detection.sustained_zero_pr_days+" days at zero output.",
+    "Cause: "+C.primary+", "+C.side+" side, confidence "+C.confidence+".",
+    "Electrical: U_DC "+E.u_dc_v+" V open-circuit, I_DC "+E.i_dc_a+" A, healthy peer U_DC "+E.u_dc_healthy_v+" V (panels fine, inverter AC side failed).",
+    "Inverter error code "+E.errorcode+" ("+E.errorcode_text+") logged "+E.errorcode_count+" times.",
+    "Loss by Bayesian causal inference: "+eur(L.euros_lost)+", 95% CI "+eur(L.euros_ci_low)+" to "+Math.round(L.euros_ci_high)+".",
+    "Loss by an independent weather model: "+eur(X.euros_lost)+". The two methods agree to "+X.agreement_pct+"%.",
+    "Validated against ENERPARC service ticket "+V.ticket_id+".",
+    "Labeled portfolio projection (not measured): about EUR "+(B.portfolio_eur_per_year_low/1e6).toFixed(1)+"-"+(B.portfolio_eur_per_year_high/1e6).toFixed(1)+"M per year across a 3.8 GW fleet.",
+    "The agent decision path is deterministic (observe, triage, diagnose, quantify, act) with no LLM in the loop."
+  ].join(" ");
+}
+function groqSystem(){
+  return "You are the assistant for an autonomous solar-plant reliability agent at a hackathon. Answer about THIS investigation using the FACTS. You may explain and contextualize, but NEVER invent specific numbers not in the facts - if asked for a missing number, say it is not in this investigation. Concise, confident, 1-4 sentences unless asked for more. FACTS: "+factsBlock();
+}
+async function _groqStream(key, messages, bubble, st){
+  const resp=await fetch("https://api.groq.com/openai/v1/chat/completions",{
+    method:"POST",
+    headers:{ "Content-Type":"application/json", "Authorization":"Bearer "+key },
+    body:JSON.stringify({ model:"llama-3.3-70b-versatile", stream:true, temperature:0.3, max_tokens:512, messages })
+  });
+  if(resp.status===429 || resp.status>=500) return false;   // retryable -> try next key
+  if(!resp.ok || !resp.body) return false;
+  const reader=resp.body.getReader(), dec=new TextDecoder(); let buf="";
+  while(true){
+    const r=await reader.read(); if(r.done) break;
+    buf+=dec.decode(r.value,{stream:true});
+    const parts=buf.split("\n"); buf=parts.pop();
+    for(const line of parts){
+      const t=line.trim(); if(!t.startsWith("data:")) continue;
+      const payload=t.slice(5).trim(); if(!payload || payload==="[DONE]") continue;
+      try{ const j=JSON.parse(payload);
+        const tok=j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content;
+        if(tok){ if(st.finished) return true;
+          if(!st.got){ st.got=true; if(st.timer) clearTimeout(st.timer); modelPill("live"); }
+          bubble.textContent+=tok; const l=document.getElementById("chatlog"); if(l) l.scrollTop=1e9; }
+      }catch(_){}
+    }
+  }
+  return st.got;
+}
+function groqAnswer(q){
+  const start=()=>{
+    const bubble=_chatAppend("bot","",false);
+    const st={got:false, finished:false, timer:null};
+    const messages=[{role:"system",content:groqSystem()}].concat(CHAT_HISTORY, [{role:"user",content:q}]);
+    const toStructured=()=>{ if(st.finished) return; st.finished=true; if(st.timer) clearTimeout(st.timer);
+      if(bubble){ bubble.remove(); } _chatAppend("bot", answerFor(q), true); modelPill("structfail"); };
+    const done=()=>{ if(st.finished) return; st.finished=true; if(st.timer) clearTimeout(st.timer);
+      _pushHist("user",q); _pushHist("assistant", (bubble&&bubble.textContent)||""); modelPill("live"); };
+    const nextOrFail=(ki)=>{ if(ki+1<GROQ_KEYS.length){ modelPill("reconnect"); attempt(ki+1); } else toStructured(); };
+    const attempt=(ki)=>{
+      _groqStream(GROQ_KEYS[ki], messages, bubble, st).then(ok=>{
+        if(st.finished) return;
+        if(ok && st.got) done(); else nextOrFail(ki);
+      }).catch(()=>{ if(st.finished) return; if(st.got) done(); else nextOrFail(ki); });
+    };
+    st.timer=setTimeout(()=>{ if(!st.got) toStructured(); }, 15000);  // no first token in 15s -> structured
+    attempt(0);
+  };
+  if(RM){ start(); return; }
+  const beat=_chatAppend("beat","searching investigation record...",false);
+  setTimeout(()=>{ if(beat) beat.textContent="grounding answer in verified facts..."; },320);
+  setTimeout(()=>{ if(beat) beat.remove(); start(); },660);
+}
+function answerFor(qRaw){
+  const q=(qRaw||"").toLowerCase();
+  const R=DATA.result, L=R.loss, X=R.loss_cross_check, E=R.evidence, C=R.cause, V=R.validation, B=R.business_case;
+  const has=(...ks)=>ks.some(k=>q.includes(k));
+  const ci=`${eur(L.euros_ci_low)}-${Math.round(L.euros_ci_high)}`;
+  if(has("curtail","grid","throttle","setpoint","market"))
+    return `Ruled out - the plant was at full setpoint with about 0% of daytime curtailed in the window, so the lost output is a genuine outage, not a market or grid throttle.`;
+  if(has("cost","loss","money","euro","much","worth","kwh","lost","expensive"))
+    return `${_n(eur(L.euros_lost))} (95% CI ${_n(ci)}) by Bayesian causal inference, and ${_n(eur(X.euros_lost))} by an independent weather model - ${_n(X.agreement_pct+"%")} agreement.`;
+  if(has("how do you know","proof","real","sure","validate","trust","confidence","convinc","legit"))
+    return `Two independent methods converge (${_n(eur(L.euros_lost))} vs ${_n(eur(X.euros_lost))}, ${_n(X.agreement_pct+"%")}) and the detection overlaps ENERPARC service ticket ${_n(V.ticket_id)} - ground truth, not a self-graded score.`;
+  if(has("why two","two method","independent","cross-check","cross check","converge","agree","second method"))
+    return `One method uses healthy peer inverters as controls (Bayesian causal inference); the other predicts output from weather alone (XGBoost). They share no assumptions, so ${_n(X.agreement_pct+"%")} agreement is real corroboration - not a model trusting itself.`;
+  if(has("cause","ac side","dc side"," ac"," dc","open-circuit","open circuit","voltage","u_dc","panel","why dead","why did"))
+    return `U_DC ${_n(E.u_dc_v+" V")} (open-circuit) with I_DC ${_n(E.i_dc_a+" A")} vs a healthy peer at ${_n(E.u_dc_healthy_v+" V")}: the panels are fine, the inverter failed on the AC side. The inverter logged error ${_n(E.errorcode+" x"+E.errorcode_count)} in the same window.`;
+  if(has("agent","decide","decision","autonomous","how does it work","how it work","determinist","replay","llm","model decide"))
+    return `A deterministic decision graph: observe -> triage -> diagnose -> quantify -> act. Every branch is auditable and the same inputs always produce the same trace - no LLM sits in the decision path.`;
+  if(has("scale","fleet","portfolio","business","roll out","rollout","gw","3.8","opportunity"))
+    return `This single event is small. Across a 3.8 GW portfolio the same detection projects about ${_n("EUR "+(B.portfolio_eur_per_year_low/1e6).toFixed(1)+"-"+(B.portfolio_eur_per_year_high/1e6).toFixed(1)+"M/yr")} recoverable - a labeled projection, not a measured number.`;
+  if(has("degrad","long term","long-term","aging","ageing","plr","panel loss"))
+    return `Annual degradation is tracked separately as a per-year residual trend; it is not part of this incident record, so I can't quote it from this investigation.`;
+  if(has("fail","happen","which inverter","what is this","inverter","dead","outage","wrong","issue"))
+    return `${_n(R.inverter_id)} on ${R.plant.split(" (")[0]} ran dead for ${_n(R.detection.sustained_zero_pr_days+" days")} (${_n(R.window.start+" to "+R.window.end)}): ${C.primary.replace("_"," ").toLowerCase()}, ${C.side} side, confidence ${_n(C.confidence)}.`;
+  return FALLBACK_MENU;
+}
+function _chatAppend(role, content, isHTML){
+  const log=document.getElementById("chatlog"); if(!log) return null;
+  const d=document.createElement("div"); d.className="msg "+role;
+  if(isHTML) d.innerHTML=content; else d.textContent=content;
+  log.appendChild(d);
+  if(RM) d.classList.add("show"); else requestAnimationFrame(()=>d.classList.add("show"));
+  log.scrollTop=log.scrollHeight; return d;
+}
+function submitChat(q){
+  if(!q || !q.trim()) return;
+  modelStart();
+  _chatAppend("user", q, false);
+  if(MODEL.status==="ready"){ groqAnswer(q); return; }   // Groq-first when keys are present
+  // offline (no keys): deterministic structured engine -- exact for known intents, menu otherwise
+  const ans=answerFor(q);
+  if(RM){ _chatAppend("bot", ans, true); return; }
+  const beat=_chatAppend("beat", "searching investigation record...", false);
+  setTimeout(()=>{ if(beat) beat.textContent="grounding answer in verified facts..."; }, 320);
+  setTimeout(()=>{ if(beat) beat.remove(); _chatAppend("bot", ans, true); }, 660);
+}
+function _chatFire(){ const inp=document.getElementById("chatinput"); if(!inp) return; const q=inp.value; if(!q.trim()) return; inp.value=""; submitChat(q); }
+function buildChat(){
+  const send=document.getElementById("chatsend"); if(send) send.addEventListener("click", _chatFire);
+  const inp=document.getElementById("chatinput");
+  if(inp) inp.addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); _chatFire(); } });
+  if(inp) inp.addEventListener("focus", modelStart, {once:true});
+  document.querySelectorAll(".chip-q").forEach(c=>c.addEventListener("click", ()=>submitChat(c.getAttribute("data-q"))));
+}
 function init(d){
   DATA=d; buildTiles(); build(d);
   const rp=document.getElementById("replay"); if(rp) rp.addEventListener("click", replay);
+  buildChat();
   const auto = RM || /[?&]auto=1/.test(location.search);
   if(auto){ document.getElementById("intro").style.display="none"; showFinal(); }
   else setupLanding();

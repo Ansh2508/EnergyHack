@@ -15,3 +15,5 @@ __pycache__/
 .pytest_cache/
 *.pyc
 verify.py
+
+apps/card/config.local.js
