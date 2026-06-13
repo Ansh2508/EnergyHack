@@ -1,109 +1,96 @@
-# ENERPARC Reliability Agent
+﻿# ENERPARC Reliability Agent
 
-**An autonomous investigator for utility-scale solar.** It finds the inverter that is silently losing money, proves *why* it failed, quantifies the loss in euros with confidence bounds, and recommends the fix — then validates every detection against the plant's own service tickets.
+An autonomous investigator for utility-scale solar. It finds the inverter that is
+silently losing money, proves WHY it failed (down to AC vs DC side), quantifies the
+loss in euros with a confidence interval, recommends the fix, and validates every
+detection against the plant's own service tickets.
 
-Built for **Energy Hack Munich 2026 — ENERPARC Open Track.**
+Built for Energy Hack Munich 2026 - ENERPARC Open Track.
 
-> Monitoring is the smoke alarm. This is the investigator that arrives after the alarm and tells you what is burning, what it costs, and what to do.
-
----
+> Monitoring is the smoke alarm. This is the investigator that arrives after the
+> alarm and tells you what is burning, what it costs, and what to do.
 
 ## The problem
 
-ENERPARC operates ~3.8 GW of solar across hundreds of plants. Existing monitoring tells operators *when* output drops. It does not tell them **which** inverter, **why**, **what it cost**, or **what to do next**. A single inverter can sit dead for weeks while plant output merely looks "a little low" — and no one notices. At portfolio scale, 1-3% of silent underperformance is **millions of euros per year**, and an emerging risk: 2027 EU rules push data centres toward 100% renewable matching, where every lost MWh is an SLA exposure.
+ENERPARC runs ~3.8 GW of solar across hundreds of plants. Existing monitoring says
+WHEN output drops. It does not say WHICH inverter, WHY, WHAT it cost, or WHAT to do
+next. A single inverter can sit dead for weeks while plant output only looks "a
+little low" - and no one notices.
 
-## What it does
+## Proof - a real fault, found from telemetry alone, matched to a real ticket
 
-A **deterministic** pipeline — physics and proven algorithms, fully auditable, **no model training required**, runs on the existing SCADA feed:
+Plant A (65 inverters, ~1.9 MWp, Silmersdorf), INV 01.05.029, with zero access to
+the service log during detection:
+
+```
+date         hero PR   sibling PR   reason
+2019-05-24   0.54      0.84         fault
+2019-05-25   0.00      0.88         fault   <- inverter dies
+ ...         0.00      ~0.84        fault   (10 sustained zero-output days)
+2019-06-04   0.40      0.80         fault   <- recovering
+2019-06-05   0.83      0.81         ok      <- back to health
+```
+
+- **Cause: DEAD_INVERTER, AC side, confidence 0.98.** During the outage U_DC rises
+  to 793 V (open circuit) while I_DC ~ 0 A -> the panels are healthy and the
+  inverter failed. The inverter's own log fired error 655626
+  ("Erkennung von Netzunterspannung, ENS") 1947 times - independent confirmation.
+- **Loss: 1,784.4 kWh -> EUR 205.21 (95% CI EUR 158.10 - 254.26)**, tariff
+  0.115 EUR/kWh read from the file, method `causalimpact` (sibling_sigma is the automatic fallback when TensorFlow is absent).
+- **Validation: matches ENERPARC ticket 2019-05-24 -> 2019-06-16** (one inverter
+  affected), found independently.
+
+Full committed proof: [docs/RESULTS.md](docs/RESULTS.md). Design:
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Honest business case
+
+Single event EUR 205 - on its own it does not pay back a service dispatch. The value
+is **catching it in 10 days instead of months, across a 3.8 GW portfolio** (projected
+EUR 3.3 - 10 M/yr; labelled projection, not a measured number).
+
+## What makes it different
+
+| Differentiator | Why it matters |
+|---|---|
+| Curtailment masked before fault scoring | a grid/market throttle is indistinguishable from an outage without it |
+| Cause with an AC vs DC split | tells the technician what to physically inspect |
+| Sibling-controlled causal euros with a 95% CI | a number a CFO can sign off, not a ratio |
+| Validated against real service tickets | precision, not a self-reported confidence score |
+
+## Pipeline
 
 ```
 Observe -> Detect -> Filter curtailment -> Diagnose -> Quantify -> Act -> Validate
 ```
 
-| Stage | What happens |
-|---|---|
-| **Observe** | Read 5-min inverter telemetry (P_AC, I_DC, U_DC), irradiance, module temp |
-| **Detect** | Compute Performance Ratio (IEC 61724); flag inverters underperforming their orientation-matched siblings in the same weather |
-| **Filter** | Mask grid curtailment (DV signal) *before* scoring faults — never cry wolf on a market throttle |
-| **Diagnose** | Classify cause: dead inverter vs soiling vs clipping vs thermal; split AC-side vs DC-side using I_DC / U_DC; corroborate with the Refu error log |
-| **Quantify** | Bayesian counterfactual (CausalImpact) using healthy siblings as controls -> lost kWh with 95% CI -> euros via the real feed-in tariff |
-| **Act** | Emit a work order: cause, euro loss, recommended action, ROI multiple |
-| **Validate** | Cross-match detections to real service tickets — precision, not a confidence score |
-
-## Proof: it found a real fault, matched to a real ticket
-
-Run on ENERPARC **Plant A** (65 Refu inverters, 1.9 MWp, Silmersdorf/Brandenburg, 2017-2026) — with **zero access to the service log during detection**:
+## Run
 
 ```
-INV 01.05.029 - May/June 2019
-  date         PR     sibling_PR   reason
-  2019-05-24   0.54     0.84        fault
-  2019-05-25   0.00     0.88        fault   <- inverter dies
-  2019-05-26   0.00     0.84        fault
-  ...          0.00     0.84        fault   (10 sustained zero-output days)
-  2019-06-03   0.00     0.84        fault
-  2019-06-04   0.40     0.80        fault   <- recovering
-  2019-06-05   0.83     0.81        ok      <- back to health
-```
-
-The 65 sibling inverters held a Performance Ratio of ~0.84 the entire time. This inverter produced **nothing for 10 days** — invisible in plant-level output, obvious against its peers.
-
-**This matches ENERPARC service ticket 2019-05-24 -> 2019-06-16** (one inverter affected) — same inverter, same window, recovered just before the ticket closed. Found independently from telemetry alone. That is not a model score. That is ground truth.
-
-## Why this is hard — and what makes it different
-
-Reading the data is 10% of the problem. The other 90% is knowing which signals to trust and proving you are right. Three things no dashboard does:
-
-| Differentiator | Why it matters |
-|---|---|
-| **Curtailment masked before fault scoring** | Grid throttling is indistinguishable from an outage without the DV/EVU signals. We mask it first. Most approaches alarm on it and lose operator trust instantly. |
-| **Causal euros with a 95% CI** | Not a ratio. A Bayesian structural time-series counterfactual answers "what would this inverter have made if healthy" — with error bars a CFO can sign off on. |
-| **Validated against real tickets** | Detection precision is measured against the maintenance team's own records, not claimed. The ticket match *is* the proof. |
-
-## Architecture
-
-```
-src/
-  ingest.py        German-CSV / native-parquet loader, 5-min -> daily, sibling grouping
-  detect.py        IEC 61724 Performance Ratio + sibling-residual fault flagging
-  curtailment.py   DV-signal mask (grid throttle != fault)
-  hero_match.py    cross-match fault runs to 2019 service tickets, ranked
-  diagnose.py      cause classification + AC/DC split + error-log corroboration   [Slice 2]
-  quantify.py      CausalImpact euro loss with 95% CI                              [Slice 2]
-  build_facts.py   verified-facts JSON (single source of truth for the UI)        [Slice 2]
-  run_slice1.py    orchestrator
-tests/             content-asserting tests (not just "it ran")
-```
-
-Computation lives entirely in Python. The narration layer (planned) only *describes* verified facts — it is never allowed to compute or invent a number.
-
-## Run it
-
-```bash
-# Place Plant A data under data/Plant A (start here)/
 pip install -r requirements.txt
-python -m src.run_slice1      # -> outputs/hero_candidates.md + detection_daily.parquet
-pytest tests/ -v              # content-asserting test suite
+python -m src.run_slice1     # detection_daily.parquet + hero_candidates.md
+python -m src.build_facts    # diagnose + quantify -> outputs/verified_facts.json
+pytest tests/ -v             # 13/13
 ```
 
-## Grounded in research
+## Grounded in research (each method cited in code)
 
-Every method is anchored to a primary source, cited in code:
-
-- **Performance Ratio** — IEC 61724 (Yield_f / Yield_r)
-- **Causal loss quantification** — Brodersen et al. 2015, *Inferring causal impact using Bayesian structural time-series models*
-- **Soiling detection** — Deceglie et al. 2018, RdTools stochastic rate-and-recovery
-- **Agent design** — Roy et al. 2024 (Microsoft), ReAct-over-tools reduces factual error vs RAG for root-cause analysis
+- Performance Ratio - IEC 61724
+- Causal loss + 95% CI - Brodersen et al. 2015 (CausalImpact / BSTS)
+- Soiling detection - Deceglie et al. 2018 (RdTools `soiling_srr`)
+- Clipping detection - Perry et al. 2021 (RdTools `clip_filter`)
+- Structured RCA tools - Roy et al. 2024 (arXiv:2403.04123)
+- Validate-before-show - arXiv:2606.01513 ; named auditable skills - SkillRL arXiv:2602.08234
 
 ## Status
 
 | Slice | Scope | State |
 |---|---|---|
-| 1 | Ingest + detect + curtailment mask + ticket-validated hero match | **Done, proven on real data** |
-| 2 | Diagnose cause + CausalImpact euros + verified-facts JSON | In progress |
-| 3 | Single ReAct agent tying the tools together + narration guard | Planned |
-| 4 | Work-order UI (on-device narration) | Planned |
-
----
+| 1 | Ingest + detect + curtailment mask + ticket-validated hero match | **Done** |
+| 2 | Diagnose cause (AC/DC) + causal euros with CI + verified-facts JSON | **Done** |
+| 3 | ReAct agent over the tools (acts, not just answers) | Planned |
+| 4 | Work-order card (renders verified_facts.json) | Planned |
 
 *Plant A data is proprietary to ENERPARC and is not included in this repository.*
+
+

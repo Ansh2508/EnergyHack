@@ -1,8 +1,12 @@
-duckdb
-pandas
-pyarrow
-openpyxl
-numpy
-pydantic>=2
-pytest
-ruff
+duckdb==1.5.3
+pandas==2.3.3
+pyarrow==24.0.0
+numpy==2.2.6
+pydantic==2.13.4
+rdtools==3.1.1
+openpyxl==3.1.5
+pytest==9.0.3
+ruff==0.15.17
+
+# optional - enables method='causalimpact' (heavy: needs ~2GB free + TensorFlow):
+# tensorflow==2.21.*  tensorflow-probability==0.25.*  tfcausalimpact==0.0.18
