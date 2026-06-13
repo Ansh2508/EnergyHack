@@ -244,3 +244,46 @@ def test_tariff_read_from_file_matches_quantify():
         dt.date(2019, 6, 3),
     )
     assert a == pytest.approx(b)
+
+
+# ---- snow / weather split (Run 11A) -------------------------------------------
+
+
+def test_isolated_plus_weather_equals_fleet_total(result):
+    """The split reconciles exactly with the (unchanged) fleet total."""
+    assert abs(
+        result["isolated_total_eur"] + result["weather_suppressed_eur"]
+        - result["fleet_total_eur"]
+    ) < 0.01
+    assert result["fleet_total_eur"] == 16826.84  # unchanged by the split
+
+
+def test_isolated_plus_weather_events_equals_n_events(result):
+    assert result["isolated_events"] + result["weather_suppressed_events"] == result["n_events"]
+
+
+def test_every_event_has_a_valid_bucket(result):
+    assert all(e["bucket"] in {"isolated", "weather"} for e in result["ranked"])
+
+
+def test_weather_starts_in_cluster_days_isolated_not(result):
+    days = set(result["weather_cluster_days"])
+    assert days, "expected at least one >=5-inverter cluster day"
+    for e in result["ranked"]:
+        if e["bucket"] == "weather":
+            assert e["window"]["start"] in days
+        else:
+            assert e["window"]["start"] not in days
+
+
+def test_hero_is_isolated(result):
+    """The validated 2019 hero outage is isolated, not a >=5-inverter snow cluster."""
+    hero = [e for e in result["ranked"] if e["inverter_id"] == "INV 01.05.029"]
+    assert hero and all(e["bucket"] == "isolated" for e in hero)
+
+
+def test_split_determinism(result):
+    again = fleet_scan.scan()
+    assert again["isolated_total_eur"] == result["isolated_total_eur"]
+    assert again["weather_suppressed_eur"] == result["weather_suppressed_eur"]
+    assert again["weather_cluster_days"] == result["weather_cluster_days"]

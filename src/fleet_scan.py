@@ -28,7 +28,7 @@ from functools import lru_cache
 import pandas as pd
 from pydantic import BaseModel
 
-from src import quantify, run_slice1
+from src import diagnose_events, quantify, run_slice1
 
 DEFAULT_DETECTION = "outputs/detection_daily.parquet"
 DEFAULT_TARIFFS = quantify.DEFAULT_TARIFFS
@@ -209,12 +209,35 @@ def scan(
     hero_events = [e for e in ranked if e["inverter_id"] == HERO_ID]
     hero_check = max(hero_events, key=lambda e: e["euros"]) if hero_events else None
 
+    # snow / weather split: a start date shared by >=5 inverters is a shared cause
+    # (weather / section / planned), not a per-inverter recoverable fault. Reuses the
+    # diagnostic clustering verbatim; fleet_total_eur and fleet_total_kwh are unchanged.
+    clusters = diagnose_events.find_clusters(ranked)
+    snow_dates = {c["start"] for c in clusters if c["n"] >= 5}
+    for e in ranked:
+        e["bucket"] = "weather" if e["window"]["start"] in snow_dates else "isolated"
+    iso = [e for e in ranked if e["bucket"] == "isolated"]
+    wea = [e for e in ranked if e["bucket"] == "weather"]
+    isolated_total_eur = round(sum(e["euros"] for e in iso), 2)
+    weather_suppressed_eur = round(sum(e["euros"] for e in wea), 2)
+    assert (
+        abs(isolated_total_eur + weather_suppressed_eur - round(sum(euros_list), 2))
+        < 0.01
+    )
+
     return {
         "data_span": {"start": dmin.isoformat(), "end": dmax.isoformat()},
         "fleet_total_eur": round(sum(euros_list), 2),
         "fleet_total_kwh": round(sum(kwh_list), 1),
         "n_events": len(ranked),
         "n_affected_inverters": len({e["inverter_id"] for e in ranked}),
+        "isolated_total_eur": isolated_total_eur,
+        "isolated_total_kwh": round(sum(e["lost_kwh"] for e in iso), 1),
+        "isolated_events": len(iso),
+        "isolated_inverters": len({e["inverter_id"] for e in iso}),
+        "weather_suppressed_eur": weather_suppressed_eur,
+        "weather_suppressed_events": len(wea),
+        "weather_cluster_days": sorted(snow_dates),
         "ranked": ranked,
         "hero_check": hero_check,
         "skipped": skipped,
@@ -254,6 +277,14 @@ def _print_summary(r: dict) -> None:
             f"    {e['inverter_id']:<14} EUR {e['euros']:>9.2f}  {e['lost_kwh']:>9.1f} kWh  "
             f"{e['n_fault_days']:>2}d  {w['start']}..{w['end']}"
         )
+    print(
+        f"  isolated faults:    EUR {r['isolated_total_eur']:,.2f} "
+        f"({r['isolated_events']} events, {r['isolated_inverters']} inverters)"
+    )
+    print(
+        f"  weather-suppressed: EUR {r['weather_suppressed_eur']:,.2f} "
+        f"({r['weather_suppressed_events']} events, {len(r['weather_cluster_days'])} cluster days)"
+    )
 
 
 def main(
