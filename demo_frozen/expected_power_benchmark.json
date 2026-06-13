@@ -1,0 +1,30 @@
+[
+  {
+    "inverter_id": "INV 01.05.029",
+    "module_type": "Module Type 6",
+    "val_r2": 0.9196,
+    "val_pct_capacity": 4.601,
+    "plr_proxy_pct_per_year": -0.1707
+  },
+  {
+    "inverter_id": "INV 01.01.001",
+    "module_type": "Module Type 1",
+    "val_r2": 0.9824,
+    "val_pct_capacity": 2.446,
+    "plr_proxy_pct_per_year": -0.4517
+  },
+  {
+    "inverter_id": "INV 01.03.018",
+    "module_type": "Module Type 2",
+    "val_r2": 0.0625,
+    "val_pct_capacity": 11.014,
+    "plr_proxy_pct_per_year": -0.4179
+  },
+  {
+    "inverter_id": "INV 01.07.044",
+    "module_type": "Module Type 11",
+    "val_r2": 0.9788,
+    "val_pct_capacity": 2.797,
+    "plr_proxy_pct_per_year": -0.4531
+  }
+]

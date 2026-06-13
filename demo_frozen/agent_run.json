@@ -1,0 +1,248 @@
+{
+  "inverter_id": "INV 01.05.029",
+  "window": {
+    "start": "2019-05-24",
+    "end": "2019-06-16"
+  },
+  "status": "work_order_issued",
+  "trace": [
+    {
+      "step": 1,
+      "node": "observe",
+      "title": "Scanning the inverter's recent output",
+      "observation": "10 consecutive days at PR=0.0 while siblings held ~0.83",
+      "decision": "fault",
+      "rationale": "a 10-day flatline against healthy peers in the same weather is not noise - this inverter stopped producing",
+      "status": "fault",
+      "evidence": {
+        "sustained_zero_days": 10,
+        "hero_mean_pr": 0.46,
+        "sibling_mean_pr": 0.83,
+        "curtailment_fraction": 0.0
+      }
+    },
+    {
+      "step": 2,
+      "node": "triage",
+      "title": "Ruling out grid / market curtailment",
+      "observation": "plant at full setpoint (DV~100); only ~0% of daytime curtailed",
+      "decision": "real_fault",
+      "rationale": "the lost output is not explained by curtailment, so this is a genuine fault to diagnose",
+      "status": "info",
+      "evidence": {
+        "curtailment_fraction": 0.0
+      }
+    },
+    {
+      "step": 3,
+      "node": "diagnose",
+      "title": "Diagnosing the cause (AC vs DC side)",
+      "observation": "P_AC ~0 for 10 consecutive days 2019-05-25..2019-06-03 while insolation normal (median 7.1 kWh/m2); U_DC present (~803 V, open-circuit) with I_DC~0 (0.13 A): panels healthy, inverter (AC side) failed",
+      "decision": "DEAD_INVERTER/AC",
+      "rationale": "U_DC present (~803 V, open-circuit) with I_DC~0 (0.13 A): panels healthy, inverter (AC side) failed",
+      "status": "fault",
+      "evidence": {
+        "side": "AC",
+        "confidence": 0.98,
+        "u_dc_v": 803.0,
+        "i_dc_a": 0.13,
+        "u_dc_healthy_v": 696.0
+      }
+    },
+    {
+      "step": 4,
+      "node": "confirm",
+      "title": "Cross-checking the inverter's own error log",
+      "observation": "655626 (1947x in window): Erkennung von Netzunterspannung (ENS,Leistungsteil)",
+      "decision": "confirmed",
+      "rationale": "the inverter logged a grid / power-unit fault in the same window - independent agreement with the physics verdict",
+      "status": "ok",
+      "evidence": {
+        "errorcode_corroboration": "655626 (1947x in window): Erkennung von Netzunterspannung (ENS,Leistungsteil)"
+      }
+    },
+    {
+      "step": 5,
+      "node": "quantify",
+      "title": "Pricing the lost energy",
+      "observation": "1692 kWh lost -> EUR 194.63 (95% CI EUR 160.65-230.45, causalimpact)",
+      "decision": "EUR 194.63",
+      "rationale": "counterfactual expected output minus actual over the window, priced at 0.115 EUR/kWh from the feed-in tariff",
+      "status": "info",
+      "evidence": {
+        "lost_kwh": 1692.4,
+        "euros_lost": 194.63,
+        "euros_ci_low": 160.65,
+        "euros_ci_high": 230.45,
+        "tariff_eur_per_kwh": 0.115,
+        "method": "causalimpact"
+      }
+    },
+    {
+      "step": 6,
+      "node": "validate",
+      "title": "Validating against ENERPARC service tickets",
+      "observation": "ticket 2019-05-24..2019-06-16: matched=True, affected_count_match=True",
+      "decision": "MATCH",
+      "rationale": "the detected outage overlaps a real maintenance ticket - ground truth, not a self-graded score",
+      "status": "ok",
+      "evidence": {
+        "ticket_id": "2019-05-24..2019-06-16",
+        "ticket_matched": true,
+        "affected_count_match": true
+      }
+    },
+    {
+      "step": 7,
+      "node": "act",
+      "title": "Issuing the work order",
+      "observation": "Dispatch technician: inverter service/replacement (ROI 0.13x)",
+      "decision": "work_order_issued",
+      "rationale": "confirmed inverter failure with a quantified, ticket-validated loss - dispatch the technician",
+      "status": "fault",
+      "evidence": {
+        "recommendation": "Dispatch technician: inverter service/replacement",
+        "roi_multiple": 0.13
+      }
+    }
+  ],
+  "result": {
+    "inverter_id": "INV 01.05.029",
+    "plant": "Plant A (Silmersdorf, 1.9 MWp, 65 inverters)",
+    "window": {
+      "start": "2019-05-24",
+      "end": "2019-06-16"
+    },
+    "detection": {
+      "sustained_zero_pr_days": 10,
+      "hero_mean_pr_fault": 0.078,
+      "sibling_mean_pr": 0.83
+    },
+    "cause": {
+      "primary": "DEAD_INVERTER",
+      "side": "AC",
+      "confidence": 0.98
+    },
+    "evidence": {
+      "u_dc_v": 803.0,
+      "i_dc_a": 0.13,
+      "u_dc_healthy_v": 696.0,
+      "errorcode": 655626,
+      "errorcode_count": 1947,
+      "errorcode_text": "Erkennung von Netzunterspannung (ENS,Leistungsteil)"
+    },
+    "loss": {
+      "lost_kwh": 1692.4,
+      "euros_lost": 194.63,
+      "euros_ci_low": 160.65,
+      "euros_ci_high": 230.45,
+      "tariff_eur_per_kwh": 0.115,
+      "method": "causalimpact"
+    },
+    "business_case": {
+      "days_undetected_caught": 10,
+      "projection_note": "PROJECTION not measured. 3.8 GW portfolio x 1-3% silent annual loss x tariff; capacity factor derived from Plant A 2021 actuals (0.087).",
+      "portfolio_eur_per_year_low": 3345263.0,
+      "portfolio_eur_per_year_high": 10035788.0
+    },
+    "action": {
+      "recommendation": "Dispatch technician: inverter service/replacement",
+      "roi_multiple": 0.13,
+      "intervention_cost_assumption_eur": 1500.0
+    },
+    "validation": {
+      "ticket_id": "2019-05-24..2019-06-16",
+      "ticket_matched": true,
+      "affected_count_match": true
+    },
+    "chart_series": {
+      "dates": [
+        "2019-05-24",
+        "2019-05-25",
+        "2019-05-26",
+        "2019-05-27",
+        "2019-05-28",
+        "2019-05-29",
+        "2019-05-30",
+        "2019-05-31",
+        "2019-06-01",
+        "2019-06-02",
+        "2019-06-03",
+        "2019-06-04",
+        "2019-06-05",
+        "2019-06-06",
+        "2019-06-07",
+        "2019-06-08",
+        "2019-06-09",
+        "2019-06-10",
+        "2019-06-11",
+        "2019-06-12",
+        "2019-06-13",
+        "2019-06-14",
+        "2019-06-15",
+        "2019-06-16"
+      ],
+      "hero_pr": [
+        0.536,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.397,
+        0.833,
+        0.829,
+        0.846,
+        0.855,
+        0.851,
+        0.852,
+        0.836,
+        0.836,
+        0.839,
+        0.84,
+        0.833,
+        0.85
+      ],
+      "sibling_pr": [
+        0.837,
+        0.878,
+        0.844,
+        0.828,
+        0.851,
+        0.859,
+        0.858,
+        0.828,
+        0.826,
+        0.832,
+        0.835,
+        0.802,
+        0.813,
+        0.81,
+        0.824,
+        0.836,
+        0.835,
+        0.823,
+        0.811,
+        0.811,
+        0.82,
+        0.824,
+        0.802,
+        0.824
+      ]
+    },
+    "narration_plain": "INV 01.05.029 ran dead for 10 days (DEAD_INVERTER, AC side; inverter error 655626 'Erkennung von Netzunterspannung (ENS,Leistungsteil)'), losing about EUR 195 (95% CI EUR 161-230, causalimpact). This matches ENERPARC ticket 2019-05-24..2019-06-16. Recommended: Dispatch technician: inverter service/replacement.",
+    "loss_cross_check": {
+      "method": "xgboost_weather",
+      "lost_kwh": 1757.8,
+      "euros_lost": 202.15,
+      "val_r2": 0.9261,
+      "causalimpact_euros": 194.63,
+      "agreement_pct": 96.3
+    }
+  }
+}
