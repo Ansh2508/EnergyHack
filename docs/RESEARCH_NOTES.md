@@ -71,3 +71,41 @@ PROJECTION, not measured. Computed, never merged with the real single-event euro
 Inputs: PORTFOLIO_KW = 3.8e6 (3.8 GW ENERPARC fleet); capacity_factor is DERIVED
 from Plant A 2021 actuals (sum of daily kWh / (plant kWp * 8760)), not assumed;
 tariff read from feed-in-tarrifs.xlsx (0.115 EUR/kWh for the 2019 window).
+
+## LangGraph v1.0 (Slice 3 - the deterministic investigation agent) -> src/agent.py
+Verified empirically against the installed langgraph 1.2.5 (NOT from v0.1 tutorials):
+    from langgraph.graph import StateGraph, START, END
+    g = StateGraph(AgentState)            # TypedDict state, channels merged per key
+    g.add_node("observe", observe_detect)
+    g.add_edge(START, "observe")          # explicit START edge (NOT set_entry_point - deprecated v0.1)
+    g.add_conditional_edges("observe", route_after_detect, {"fault": "triage", "healthy": END})
+    app = g.compile(); state = app.invoke(initial_state)
+    mermaid = app.get_graph().draw_mermaid()   # -> docs/agent_graph.mmd (text only; no PNG/network)
+Verified signature: add_conditional_edges(source: str, path: Callable[..., Hashable],
+    path_map: dict[Hashable, str] | None = None). path returns a branch key; path_map maps it
+    to the next node (or END). compile() validates; invoke(state) runs to a terminal node.
+
+DESIGN: routing is deterministic plain Python - NO LLM, NO API in the decision path
+(auditability > black box). An LLM-routed variant is a one-line swap (path=an LLM call) but is
+deliberately not used.
+
+Roy et al. 2024 (arXiv:2403.04123): route_after_detect / route_after_triage AND every TraceEvent
+read TYPED tool fields (CauseVerdict.primary_cause, LossEstimate.euros_*, sustained-zero-day count,
+curtailment fraction) - never prose. The typed trace (outputs/agent_run.json) is the agent's
+structured observability layer and the UI animation contract.
+
+SkillRL (arXiv:2602.08234): each node is a named skill wrapping an existing Slice-1/2 tool; the
+curtailment triage is the lesson-from-failure skill that can TERMINATE the investigation early
+(reject -> END) so the agent never wastes the Bayesian model on a non-fault.
+
+Brodersen 2015 / RdTools (Deceglie, Perry): reused UNCHANGED via the diagnose/quantify nodes;
+proven by the Slice-2 tests still passing.
+
+## Phase B research-in-code mapping (Slice 3 agent)
+| Source | Made true in code | Proven by test |
+|---|---|---|
+| LangGraph v1.0 (1.2.5) | StateGraph + add_conditional_edges (no set_entry_point); draw_mermaid -> docs/agent_graph.mmd | graph compiles; test idiom confirmed empirically |
+| Roy 2024 (arXiv:2403.04123) | routing AND trace read TYPED fields, never prose | test_routing_reads_typed_fields, test_trace_matches_result |
+| SkillRL (arXiv:2602.08234) | curtailment guard = lesson-from-failure skill; terminates early | test_agent_curtailment_short_circuits, test_agent_healthy_short_circuits |
+| Validate-before-show (arXiv:2606.01513) | trace + work order computed ONCE from the same verdict/loss | test_trace_matches_result, test_quantify_runs_once |
+| Brodersen 2015 / RdTools | engine reused unchanged via diagnose/quantify nodes | the 7 Slice-2 tests still green |

@@ -8,7 +8,6 @@ Python; the JSON only describes verified facts.
 
 from __future__ import annotations
 
-import datetime as dt
 import json
 import math
 
@@ -48,6 +47,8 @@ def build_facts(
     window_start: str,
     window_end: str,
     *,
+    verdict: object | None = None,
+    loss: object | None = None,
     cache_path: str = DEFAULT_CACHE,
     detection_path: str = DEFAULT_DETECTION,
     tariffs_path: str = DEFAULT_TARIFFS,
@@ -55,22 +56,28 @@ def build_facts(
     errorcodes_path: str = DEFAULT_ERRORCODES,
     errorcodes_dict_path: str = DEFAULT_ERRORCODES_DICT,
 ) -> dict:
-    """Compute, assemble and self-check the verified-facts payload."""
+    """Compute, assemble and self-check the verified-facts payload.
+
+    If verdict/loss are supplied (e.g. by the agent) they are used as-is, so the
+    diagnosis and CausalImpact run exactly once per investigation and the trace
+    equals the work order. Default None recomputes them (standalone Slice-2 use).
+    """
     iid = canonical_inverter_id(inverter_id) or str(inverter_id)
     ws = pd.Timestamp(window_start).date()
     we = pd.Timestamp(window_end).date()
 
-    cause = diagnose(iid, window_start, window_end, cache_path=cache_path,
-                     errorcodes_path=errorcodes_path,
-                     errorcodes_dict_path=errorcodes_dict_path,
-                     system_overview_path=system_overview_path)
-    loss = quantify_loss(iid, window_start, window_end,
-                         detection_path=detection_path, tariffs_path=tariffs_path)
+    cause = verdict if verdict is not None else diagnose(
+        iid, window_start, window_end, cache_path=cache_path,
+        errorcodes_path=errorcodes_path, errorcodes_dict_path=errorcodes_dict_path,
+        system_overview_path=system_overview_path)
+    loss = loss if loss is not None else quantify_loss(
+        iid, window_start, window_end,
+        detection_path=detection_path, tariffs_path=tariffs_path)
     det = pd.read_parquet(detection_path)
     det["date"] = pd.to_datetime(det["date"]).dt.date
     stats = _detection_stats(det, iid, ws, we)
     chart = _chart_series(det, iid, ws, we)
-    evid = _evidence_signals(iid, ws, we, cache_path, errorcodes_path, errorcodes_dict_path)
+    evid = _evidence_signals(cause, ws, we, errorcodes_path, errorcodes_dict_path)
     meta = load_meta(system_overview_path)
     cf = _capacity_factor(det, meta)
     portfolio_kwh = PORTFOLIO_KW * 8760.0 * cf
@@ -164,34 +171,15 @@ def _chart_series(det: pd.DataFrame, iid, ws, we) -> dict:
     }
 
 
-def _evidence_signals(iid, ws, we, cache_path, ec_path, ec_dict_path) -> dict:
+def _evidence_signals(cause, ws, we, ec_path, ec_dict_path) -> dict:
+    """DC numbers come from the verdict (single authority); errorcode from the log."""
+    import re
+
     con = duckdb.connect()
     try:
-        cols = [r[0] for r in con.execute(
-            f"DESCRIBE SELECT * FROM read_parquet('{cache_path}')").fetchall()]
-        eid = canonical_inverter_id(iid)
-        import re
-        esc = re.escape(eid)
-        udc = _find(cols, esc + r" / U_DC")
-        idc = _find(cols, esc + r" / I_DC")
-        pac = _find(cols, esc + r" / P_AC")
-        alt = _find(cols, r"Altitude")
-        # outage-window daytime means (dead days: P_AC ~ 0)
-        u_dc, i_dc = con.execute(
-            f"""SELECT avg("{udc}"), avg("{idc}") FROM read_parquet('{cache_path}')
-                WHERE "{alt}" > 5 AND "{pac}" < 0.5
-                  AND CAST(timestamp AS DATE) BETWEEN '{ws}' AND '{we}'"""
-        ).fetchone()
-        # healthy U_DC: 30 days before the window, producing normally
-        pre0 = ws - dt.timedelta(days=30)
-        u_dc_h = con.execute(
-            f"""SELECT avg("{udc}") FROM read_parquet('{cache_path}')
-                WHERE "{alt}" > 5 AND "{pac}" > 1.0
-                  AND CAST(timestamp AS DATE) BETWEEN '{pre0}' AND '{ws}'"""
-        ).fetchone()[0]
         eccols = [r[0] for r in con.execute(
             f"DESCRIBE SELECT * FROM read_parquet('{ec_path}')").fetchall()]
-        errc = _find(eccols, re.escape(eid) + r" / Error")
+        errc = _find(eccols, re.escape(cause.inverter_id) + r" / Error")
         code_row = con.execute(
             f"""SELECT "{errc}" code, count(*) n FROM read_parquet('{ec_path}')
                 WHERE "{errc}" IS NOT NULL AND "{errc}" != 0
@@ -205,9 +193,9 @@ def _evidence_signals(iid, ws, we, cache_path, ec_path, ec_dict_path) -> dict:
     count = int(code_row[1]) if code_row else 0
     text = _load_errorcode_dict(ec_dict_path).get(code, "") if code else ""
     return {
-        "u_dc_v": round(float(u_dc), 0) if u_dc is not None else None,
-        "i_dc_a": round(float(i_dc), 2) if i_dc is not None else None,
-        "u_dc_healthy_v": round(float(u_dc_h), 0) if u_dc_h is not None else None,
+        "u_dc_v": cause.u_dc_v,
+        "i_dc_a": cause.i_dc_a,
+        "u_dc_healthy_v": cause.u_dc_healthy_v,
         "errorcode": code,
         "errorcode_count": count,
         "errorcode_text": text,

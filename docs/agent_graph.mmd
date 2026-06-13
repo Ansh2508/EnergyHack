@@ -1,0 +1,19 @@
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	observe(observe)
+	triage(triage)
+	diagnose(diagnose)
+	quantify(quantify)
+	act(act)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> observe;
+	diagnose --> quantify;
+	observe -. &nbsp;healthy&nbsp; .-> __end__;
+	observe -. &nbsp;fault&nbsp; .-> triage;
+	quantify --> act;
+	triage -. &nbsp;curtailment&nbsp; .-> __end__;
+	triage -. &nbsp;real_fault&nbsp; .-> diagnose;
+	act --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc

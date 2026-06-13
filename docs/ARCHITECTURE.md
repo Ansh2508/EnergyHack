@@ -45,3 +45,37 @@ arXiv:2606.01513).
 The planned Slice-3 agent is ReAct-over-tools (Roy et al. 2024, arXiv:2403.04123):
 it *acts* on the typed tool outputs (CauseVerdict, LossEstimate), it does not
 answer from prose.
+
+## Agent (Slice 3) - deterministic investigation graph
+
+A LangGraph v1.0 StateGraph orchestrates the Slice 1/2 tools into one end-to-end
+investigation and writes a typed, replayable trace (outputs/agent_run.json,
+consumed by the Slice-4 UI). The decision path is DETERMINISTIC plain Python:
+the routing functions read typed tool outputs (sustained-zero-day count,
+CauseVerdict.side, curtailment flag) and branch, so every step is auditable and
+no LLM can hallucinate the diagnosis. An LLM-routed variant is a one-line swap
+(pass an LLM call as the add_conditional_edges path function); we keep routing
+deterministic on purpose. The curtailment triage is a lesson-from-failure guard
+that terminates the investigation early, never wasting the Bayesian model on a throttle.
+
+```mermaid
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	observe(observe)
+	triage(triage)
+	diagnose(diagnose)
+	quantify(quantify)
+	act(act)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> observe;
+	diagnose --> quantify;
+	observe -. &nbsp;healthy&nbsp; .-> __end__;
+	observe -. &nbsp;fault&nbsp; .-> triage;
+	quantify --> act;
+	triage -. &nbsp;curtailment&nbsp; .-> __end__;
+	triage -. &nbsp;real_fault&nbsp; .-> diagnose;
+	act --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
+```

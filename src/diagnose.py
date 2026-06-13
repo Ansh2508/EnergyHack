@@ -49,6 +49,9 @@ class CauseVerdict(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
     evidence: list[str]
     errorcode_corroboration: str | None = None
+    u_dc_v: float | None = None  # mean DC voltage during the dead run (the AC/DC authority)
+    i_dc_a: float | None = None  # mean DC current during the dead run
+    u_dc_healthy_v: float | None = None  # mean DC voltage in the healthy pre-window
 
 
 def diagnose(
@@ -95,6 +98,9 @@ def diagnose(
             confidence=round(min(conf, 0.99), 2),
             evidence=dead["evidence"],
             errorcode_corroboration=ec,
+            u_dc_v=dead.get("u_dc_v"),
+            i_dc_a=dead.get("i_dc_a"),
+            u_dc_healthy_v=dead.get("u_dc_healthy_v"),
         )
 
     win = df[(df["date"] >= ws) & (df["date"] <= we)].dropna(subset=["pr", "insol"])
@@ -183,12 +189,17 @@ def _skill_dead_inverter(df: pd.DataFrame, ws, we) -> dict:
     else:
         side = None
         side_txt = f"ambiguous DC side (U_DC {udc:.0f} V, I_DC {idc:.2f} A)"
+    pre = df[(df["date"] < ws) & (df["pr"].fillna(0) > 0.5)]
+    u_dc_healthy = round(float(pre["udc"].mean()), 0) if not pre.empty else None
     ev = [
         f"P_AC ~0 for {ndays} consecutive days {best[0]}..{best[1]} "
         f"while insolation normal (median {float(run['insol'].median()):.1f} kWh/m2)",
         side_txt,
     ]
-    return {"hit": True, "side": side, "consecutive_days": ndays, "evidence": ev}
+    return {
+        "hit": True, "side": side, "consecutive_days": ndays, "evidence": ev,
+        "u_dc_v": round(udc, 0), "i_dc_a": round(idc, 2), "u_dc_healthy_v": u_dc_healthy,
+    }
 
 
 def _skill_soiling(pr_daily: pd.Series, insol_daily: pd.Series,
