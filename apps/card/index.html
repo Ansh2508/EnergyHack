@@ -804,9 +804,10 @@ const INVERTER_ORDER = (function(){
   others.forEach((id,k)=>{ order[slots[Math.floor(k*slots.length/Math.max(others.length,1))]]=id; });
   return order;
 })();
+const fmt = n => Math.round(n).toLocaleString("en-US");  // 16827 -> "16,827"
 function buildKpis(){
   const el=document.getElementById("kpis"); if(!el) return;
-  const eur="EUR "+FLEET.fleet_total_eur.toLocaleString("de-DE",{maximumFractionDigits:0});
+  const eur="EUR "+fmt(FLEET.fleet_total_eur);
   const cards=[[eur,"identified"],[String(FLEET.n_events),"fault events"],
     [FLEET.n_affected_inverters+" / 65","inverters"],
     [FLEET.data_span.start.slice(0,4)+"-"+FLEET.data_span.end.slice(0,4),"data span"]];
@@ -837,10 +838,10 @@ function buildTriage(showAll){
     const hero=r.id==="INV 01.05.029";
     const sig=dead?'<span class="sig dead">DEAD INVERTER</span>':'<span class="sig det">DETECTED</span>';
     const act=dead?'<span class="act dispatch">&rarr; Dispatch</span>':'<span class="act review">&rarr; Review</span>';
-    const eur=Math.round(r.euros).toLocaleString("de-DE")+(hero?' <span style="color:var(--muted)">(validated)</span>':'');
+    const eur=fmt(r.euros)+(hero?' <span style="color:var(--muted)">(validated)</span>':'');
     return `<tr class="${hero?'hero':''}"><td class="num">${i+1}</td><td>${r.id}</td>`
       +`<td class="num">${r.events}</td><td class="num">${eur}</td>`
-      +`<td class="num">${Math.round(r.kwh).toLocaleString("de-DE")}</td><td>${sig}</td><td>${act}</td></tr>`;
+      +`<td class="num">${fmt(r.kwh)}</td><td>${sig}</td><td>${act}</td></tr>`;
   }).join("");
   const b=document.getElementById("triage-toggle");
   if(b) b.textContent=showAll?"Show less":("Show all "+rows.length+" inverters");
@@ -877,9 +878,9 @@ function redrawTimeline(mode){
 }
 function buildFleetSection(){
   const h=document.getElementById("fleet-headline");
-  if(h) h.textContent="EUR "+FLEET.isolated_total_eur.toLocaleString("de-DE",{maximumFractionDigits:0})
+  if(h) h.textContent="EUR "+fmt(FLEET.isolated_total_eur)
     +" in isolated inverter faults - recoverable. Plus EUR "
-    +FLEET.weather_suppressed_eur.toLocaleString("de-DE",{maximumFractionDigits:0})
+    +fmt(FLEET.weather_suppressed_eur)
     +" across "+FLEET.weather_suppressed_events+" weather events the agent suppressed (not dispatched).";
   const f=document.getElementById("fleet-foot");
   if(f) f.textContent="Fleet scan - "+FLEET.data_span.start+" -> "+FLEET.data_span.end+" - "
