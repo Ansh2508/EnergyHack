@@ -1,124 +1,171 @@
 # ENERPARC Reliability Agent
 
-An autonomous investigator for utility-scale solar. It finds the inverter that is
-silently losing money, proves WHY it failed (down to AC vs DC side), quantifies the
-loss in euros with a confidence interval, **cross-checks that loss with a second,
-independent method**, recommends the fix, and validates every detection against the
-plant's own service tickets.
+An autonomous agent that sweeps a utility-scale solar fleet, finds the inverters
+that have silently stopped producing, proves why (down to AC vs DC side), and
+prices the lost energy in euros - then tells you which faults to dispatch a
+technician for and which "faults" are just weather it should ignore.
 
-Built for Energy Hack Munich 2026 - ENERPARC Open Track.
+Built for the Energy / AI Hackathon Munich 2026 - ENERPARC open track.
 
-> Monitoring is the smoke alarm. This is the investigator that arrives after the
-> alarm and tells you what is burning, what it costs, and what to do.
+> The AI explains; the physics decides.
 
-## The problem
+## The result
 
-ENERPARC runs ~3.8 GW of solar across hundreds of plants. Existing monitoring says
-WHEN output drops. It does not say WHICH inverter, WHY, WHAT it cost, or WHAT to do
-next. A single inverter can sit dead for weeks while plant output only looks "a
-little low" - and no one notices.
+Run against Plant A (Silmersdorf, 1.9 MWp, 65 inverters) over the full data span
+**2017-01-01 to 2026-06-01** (about 9 years). All numbers below come from
+`outputs/fleet_scan.json` and the frozen demo artifacts - nothing is invented.
 
-## Proof - a real fault, found from telemetry alone, matched to a real ticket
+- Swept **all 65 inverters**; found **182 sustained-zero outage events** on **33** of them.
+- **EUR 15,001 in isolated, confirmed inverter faults** - genuinely recoverable
+  (97 events across 26 inverters, ~115,568 kWh).
+- **Plus EUR 1,826 across 85 weather events the agent correctly SUPPRESSED**
+  (not dispatched) - 10 days when 5+ inverters went dark together (snow / shared cause).
+- Detected total across both buckets: EUR 16,827.
+- **One incident validated against a real ENERPARC maintenance ticket**
+  (INV 01.05.029, 2019). This is a single ground-truth match, **not** a fleet-wide
+  accuracy rate.
 
-Plant A (65 inverters, ~1.9 MWp, Silmersdorf), INV 01.05.029, with zero access to
-the service log during detection:
+These are *detected* / *recoverable* / *suppressed* figures, not "savings" - acting
+on them is a separate operational decision.
 
-```
-date         hero PR   sibling PR   reason
-2019-05-24   0.54      0.84         fault
-2019-05-25   0.00      0.88         fault   <- inverter dies
- ...         0.00      ~0.83        fault   (10 sustained zero-output days)
-2019-06-04   0.40      0.80         fault   <- recovering
-2019-06-05   0.83      0.81         ok      <- back to health
-```
+## Demo
 
-- **Cause: DEAD_INVERTER, AC side, confidence 0.98.** During the outage U_DC rises
-  to 803 V (open circuit) while I_DC ~ 0.13 A and a healthy peer sits at 696 V ->
-  the panels are fine and the inverter failed. The inverter's own log fired error
-  655626 ("Erkennung von Netzunterspannung, ENS") 1947 times - independent confirmation.
-- **Loss: 1,692.4 kWh -> EUR 194.63 (95% CI EUR 160.65 - 230.45)**, tariff
-  0.115 EUR/kWh read from the file, method `causalimpact` (sibling_sigma is the
-  automatic fallback when TensorFlow is absent).
-- **Independent cross-check: EUR 202.15** from a weather-driven XGBoost model that
-  shares no assumptions with the Bayesian method -> **96.3% agreement**, and the ML
-  estimate falls inside the Bayesian 95% interval. Two methods, one number.
-- **Validation: matches ENERPARC ticket 2019-05-24 -> 2019-06-16** (one inverter
-  affected), found independently.
-
-Full committed proof: [docs/RESULTS.md](docs/RESULTS.md). Design:
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
-
-## What the judges see - the incident card
-
-[`apps/card/index.html`](apps/card/index.html) is a single, self-contained page
-(no build, no server, no key) that renders the frozen investigation. It does not
-*describe* the agent - it *replays* the investigation: the fleet array surfaces the
-one dead inverter, the instrument chart craters to zero against a healthy fleet,
-the 7 reasoning steps reveal one by one to the ticket match, and the two euro
-estimates land side by side at 96.3% agreement. Every number is read at runtime
-from `agent_run.json`; nothing is hard-coded.
-
-## Honest business case
-
-Single event EUR 195 - on its own it does not pay back a service dispatch. The value
-is **catching it in 10 days instead of months, across a 3.8 GW portfolio** (projected
-EUR 3.3 - 10 M/yr; labelled projection, not a measured number).
-
-## What makes it different
-
-| Differentiator | Why it matters |
-|---|---|
-| Curtailment masked before fault scoring | a grid/market throttle is indistinguishable from an outage without it |
-| Cause with an AC vs DC split | tells the technician what to physically inspect |
-| Sibling-controlled causal euros with a 95% CI | a number a CFO can sign off, not a ratio |
-| Second, independent loss estimate (weather ML) | two methods with no shared assumptions agree to 96.3% - that is what a money decision needs |
-| Validated against real service tickets | precision, not a self-reported confidence score |
-| Deterministic, replayable agent (no LLM in the decision path) | every step is auditable; the same inputs always produce the same trace |
-
-## Pipeline
+The deliverable is a single self-contained HTML page (no build step, no server
+required to view the static replay):
 
 ```
-Observe -> Detect -> Filter curtailment -> Diagnose -> Quantify -> Cross-check -> Act -> Validate
+cd apps/card
+python -m http.server 8000
+# open http://localhost:8000/index.html
 ```
 
-A LangGraph state machine drives Observe -> Detect -> Triage -> Diagnose -> Quantify
--> Act and writes a typed, replayable trace (`outputs/agent_run.json`). The decision
-path is plain deterministic Python - no LLM can hallucinate the diagnosis. The
-weather-ML cross-check runs **backend-only**, off the decision path, and never raises
-an alarm; it only re-prices an already-detected event.
+- Click **Run investigation** to watch the agent scan the fleet, find INV 01.05.029,
+  and reason through the incident step by step.
+- Append `?auto=1` (or enable reduced-motion) to jump straight to the final report.
+- Serving over http (not `file://`) also enables the optional live chat.
 
-## Run
+## How it works
+
+```mermaid
+flowchart LR
+  RAW[SCADA telemetry<br/>65 inverters, 5-min] --> DET[detect<br/>performance ratio]
+  DET --> TRI[triage<br/>mask curtailment]
+  TRI --> DIA[diagnose<br/>AC vs DC, error log]
+  DIA --> QNT[quantify<br/>lost EUR + 95% CI]
+  QNT --> ACT[act<br/>work order]
+  FLEET[fleet_scan<br/>orchestrates all 65] -. reuses .-> DET
+  FLEET --> CLUS[diagnose_events<br/>cluster shared-cause snow]
+```
+
+- **detect** - computes each inverter's daily Performance Ratio (IEC 61724) and
+  compares it to the median of its same-orientation neighbours; a sustained gap is a flag.
+- **triage** - masks grid/market curtailment (the plant's DV setpoint signal) so a
+  throttle is never scored as a fault.
+- **diagnose** - splits AC vs DC failure from the DC rails (U_DC present + I_DC ~ 0 =
+  panels alive, inverter dead) and corroborates with the inverter's own error log.
+- **quantify** - prices the loss as (expected - actual) x tariff, with a confidence interval.
+- **act** - issues a work order with the recommendation and ROI context.
+- **fleet_scan** runs that pipeline across all 65 inverters and aggregates every event;
+  **diagnose_events** clusters events that start on the same day across many inverters
+  (snow / shared cause) so they are separated from isolated, recoverable faults.
+
+## The method
+
+Every euro is estimated **two independent ways**:
+
+1. A **deterministic sibling counterfactual** - expected output = healthy neighbour
+   inverters under the same sun; lost = expected - actual.
+2. An **XGBoost weather model** - trained on the inverter's own clean days
+   (power as a function of irradiance and temperature), then asked "given this
+   weather, what should it have produced?"
+
+On the validated 2019 incident the two estimates were **EUR 195** (Bayesian/sibling)
+and **EUR 202** (weather ML) - **96.3% agreement**. That 96.3% is two-method
+*agreement on one incident*, not a fleet accuracy figure.
+
+Core principle: **the AI explains; the physics decides.** Every discrete decision
+(flag, curtailment mask, AC/DC split, euro figure) is rule-based and computed in
+Python. The only language model in the system is the optional chat explainer.
+
+## Honest framing
+
+The fleet number is deliberately split into two buckets:
+
+- **Isolated faults (recoverable):** one inverter dark while its neighbours produce -
+  a real failure worth a technician. EUR 15,001.
+- **Weather-suppressed (correctly ignored):** 5+ inverters going dark on the same day -
+  almost always snow or a shared upstream cause, not a per-inverter fault. EUR 1,826,
+  flagged and *not* dispatched.
+
+Why the discrimination matters: one dead inverter in July is a dispatch; the whole
+array dark in January is snow - stand down. An agent that cannot tell these apart
+floods operators with false work orders.
+
+## Tech stack
+
+- **Python** - pandas, numpy, DuckDB (off-disk parquet), XGBoost, optional CausalImpact
+  (BSTS); rdtools for soiling/clipping; openpyxl for the plant workbooks.
+- **Tests** - pytest (deterministic, range-tolerant).
+- **The card** - one self-contained HTML file: IBM Plex type, hand-rolled inline SVG
+  (no chart library), all numbers read from JSON.
+- **Chat** - optional Groq `llama-3.3-70b-versatile` over the API, with a deterministic
+  local fallback that answers from the verified facts when no key/offline. The
+  analysis is fully local and deterministic; the chat sends your question to a hosted
+  model, so it is not fully on-premise.
+
+## Repository structure
 
 ```
+ep-reliability-agent/
+  apps/card/index.html        self-contained incident + fleet card (the demo)
+  apps/card/*.json            frozen data the card renders (agent_run, benchmark, ...)
+  src/
+    ingest.py                 load monitoring parquet + plant metadata (DuckDB)
+    detect.py                 performance ratio, sibling baseline, flagging (IEC 61724)
+    curtailment.py            mask grid/market curtailment days (DV signal)
+    hero_match.py             match detected outages to real 2019 service tickets
+    diagnose.py               cause + AC/DC side + error-log corroboration
+    quantify.py               lost kWh + EUR with 95% CI (causalimpact / sibling_sigma)
+    expected_power.py         XGBoost weather model - independent loss cross-check
+    agent.py                  deterministic LangGraph investigation + replayable trace
+    build_facts.py            assemble verified_facts.json (validate-before-show)
+    fleet_scan.py             run all 65, aggregate, snow/weather split
+    diagnose_events.py        diagnose top events + cluster shared-cause days
+    run_slice1.py             pipeline orchestrator -> detection_daily.parquet
+    schemas.py                Pydantic V2 boundary models
+  tests/                      pytest suite (slices 1-3, expected_power, fleet_scan, diagnose_events)
+  demo_frozen/                frozen canonical artifacts (tracked, reproducible)
+  outputs/                    generated artifacts (gitignored; regenerate with the pipeline)
+  docs/                       ARCHITECTURE notes, RESULTS, RESEARCH_NOTES
+  data/                       Plant A data (proprietary to ENERPARC; gitignored)
+  ARCHITECTURE.md             technical deep-dive
+  requirements.txt
+```
+
+## Run it yourself
+
+```
+python -m venv .venv && . .venv/bin/activate     # (Windows: .venv\Scripts\activate)
 pip install -r requirements.txt
-python -m src.run_slice1     # detection_daily.parquet + hero_candidates.md
-python -m src.build_facts    # diagnose + quantify -> outputs/verified_facts.json
-python -m src.agent          # deterministic investigation -> outputs/agent_run.json
-pytest tests/ -v             # 25/25
+
+python -m src.run_slice1        # ingest -> detect -> mask -> detection_daily.parquet
+python -m src.build_facts       # single-incident diagnose + quantify -> verified_facts.json
+python -m src.fleet_scan        # all 65 inverters -> outputs/fleet_scan.json (+ snow/weather split)
+python -m src.diagnose_events   # diagnose top events + clusters -> fleet_top_diagnostics.json
+
+pytest -q                       # run the test suite
+cd apps/card && python -m http.server 8000   # serve the card
 ```
 
-Open `apps/card/index.html` in a browser (or serve `apps/card/` via GitHub Pages)
-to see the incident card.
+The data tree (`data/Plant A (start here)/`) is proprietary to ENERPARC and is not
+included in this repository; the pipeline reads the native monitoring parquet from there.
 
-## Grounded in research (each method cited in code)
+## Data
 
-- Performance Ratio - IEC 61724
-- Causal loss + 95% CI - Brodersen et al. 2015 (CausalImpact / BSTS)
-- Weather-driven expected-power baseline - gradient-boosted trees (XGBoost), trained
-  only on IEA PVPS Task 13 clean-filtered data; used as an independent loss control
-- Soiling detection - Deceglie et al. 2018 (RdTools `soiling_srr`)
-- Clipping detection - Perry et al. 2021 (RdTools `clip_filter`)
-- Structured RCA tools - Roy et al. 2024 (arXiv:2403.04123)
-- Validate-before-show - arXiv:2606.01513 ; named auditable skills - SkillRL arXiv:2602.08234
+- Plant A, Silmersdorf - 1.9 MWp, 65 inverters, 5-minute SCADA, 2017-2026.
+- Feed-in tariff **EUR 0.115 / kWh**, read from the plant's `feed-in-tarrifs.xlsx`
+  (never assumed).
+- Inverter error codes (Refu) mapped to their German descriptions from the plant's
+  error-code dictionary.
 
-## Status
-
-| Slice | Scope | State |
-|---|---|---|
-| 1 | Ingest + detect + curtailment mask + ticket-validated hero match | **Done** |
-| 2 | Diagnose cause (AC/DC) + causal euros with CI + verified-facts JSON | **Done** |
-| 3 | Deterministic LangGraph agent over the tools (acts, replayable trace) | **Done** |
-| 3.5 | Independent weather-ML loss cross-check + degradation + benchmark | **Done** |
-| 4 | Incident-report card (renders agent_run.json, static) | **Done** |
-
-*Plant A data is proprietary to ENERPARC and is not included in this repository.*
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full data flow and module contracts.

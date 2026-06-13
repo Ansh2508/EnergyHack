@@ -17,3 +17,12 @@ __pycache__/
 verify.py
 
 apps/card/config.local.js
+
+# --- appended: repo hygiene ---
+config.local.js
+venv/
+env/
+.DS_Store
+Thumbs.db
+*.log
+pytest-cache-files-*/
