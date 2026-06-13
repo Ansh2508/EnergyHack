@@ -1,0 +1,8 @@
+duckdb
+pandas
+pyarrow
+openpyxl
+numpy
+pydantic>=2
+pytest
+ruff

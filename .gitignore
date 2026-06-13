@@ -1,0 +1,17 @@
+data/
+outputs/
+__pycache__/
+.ruff_cache/
+.venv/
+*.pyc
+.env
+*.parquet
+*.zip
+*.xlsb
+data/
+outputs/
+__pycache__/
+.ruff_cache/
+.pytest_cache/
+*.pyc
+verify.py
