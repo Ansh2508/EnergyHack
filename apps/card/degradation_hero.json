@@ -1,0 +1,38 @@
+[
+  {
+    "year": 2017,
+    "mean_residual_pct": -0.527
+  },
+  {
+    "year": 2018,
+    "mean_residual_pct": -0.168
+  },
+  {
+    "year": 2019,
+    "mean_residual_pct": -0.095
+  },
+  {
+    "year": 2020,
+    "mean_residual_pct": -0.224
+  },
+  {
+    "year": 2021,
+    "mean_residual_pct": -1.257
+  },
+  {
+    "year": 2022,
+    "mean_residual_pct": -0.702
+  },
+  {
+    "year": 2023,
+    "mean_residual_pct": -0.913
+  },
+  {
+    "year": 2024,
+    "mean_residual_pct": -1.352
+  },
+  {
+    "year": 2025,
+    "mean_residual_pct": -1.671
+  }
+]

@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Incident Report - INV 01.05.029 - Plant A</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#FAFAF8; --ink:#1A1D21; --muted:#45484E;
+  --fault:#C0362C; --healthy:#3D7A5E; --hair:#E8E6E1;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,monospace;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:var(--paper);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body{display:flex;justify-content:center;padding:54px 20px 90px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.report{position:relative;width:100%;max-width:680px;opacity:0;transform:translateY(8px)}
+.report.in{opacity:1;transform:none;transition:opacity .5s ease,transform .5s ease}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+.lbl{font-family:var(--mono);font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.rule{height:1px;background:var(--hair);margin:30px 0;border:0}
+
+/* intro */
+#intro{position:fixed;inset:0;background:var(--paper);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:30;gap:26px}
+#intro.out{opacity:0;transform:translateY(-14px);transition:opacity .6s ease,transform .6s ease;pointer-events:none}
+.grid65{display:grid;grid-template-columns:repeat(13,16px);grid-auto-rows:16px;gap:7px}
+.tile{width:16px;height:16px;border-radius:2px;background:var(--healthy);opacity:0;transform:scale(.4)}
+.tile.show{opacity:.6;transform:scale(1);transition:opacity .45s ease,transform .45s ease}
+.tile.fault{background:var(--fault)}
+.tile.fault.show{opacity:1}
+.icap{font-family:var(--mono);font-size:15px;letter-spacing:.04em;color:var(--muted);opacity:0}
+.icap.show{opacity:1;transition:opacity .6s ease .2s}
+.icap b{color:var(--fault);font-weight:500}
+
+/* header */
+.head .eyebrow{margin-bottom:9px}
+.id{font-family:var(--mono);font-size:27px;font-weight:500;letter-spacing:-.01em;line-height:1.1}
+.id .dot{color:var(--hair);margin:0 12px}
+.id .plant{color:var(--muted);font-weight:400;font-size:21px}
+.chip{display:inline-block;margin-top:14px;font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--fault);border:1px solid var(--fault);border-radius:3px;padding:5px 10px}
+.chip .conf{color:var(--muted);border-left:1px solid var(--hair);margin-left:9px;padding-left:9px}
+
+/* chart */
+.chartwrap{margin:4px -8px 0}
+svg{display:block;width:100%;height:auto;overflow:visible}
+.grL{stroke:var(--hair);stroke-width:1}
+.tick{font-family:var(--mono);font-size:12px;fill:var(--muted)}
+.ln{fill:none;stroke-linecap:round;stroke-linejoin:round}
+.lnHero{stroke:var(--fault);stroke-width:2.9}
+.lnSib{stroke:var(--healthy);stroke-width:2.2;opacity:.9}
+.endlbl{font-family:var(--mono);font-size:13px;font-weight:500}
+.annot{font-family:var(--mono);font-size:12.5px;letter-spacing:.04em;fill:var(--fault)}
+.annotL{stroke:var(--fault);stroke-width:1;stroke-dasharray:2 3;opacity:.5}
+.mk{fill:var(--fault)}
+.draw{stroke-dashoffset:var(--len);stroke-dasharray:var(--len)}
+.draw.go{stroke-dashoffset:0;transition:stroke-dashoffset 1.5s cubic-bezier(.4,0,.2,1)}
+.fadeIn{opacity:0}
+.fadeIn.go{opacity:1;transition:opacity .5s ease}
+
+/* chart: lost-output wedge + crater label */
+.wedge{fill:var(--fault);opacity:0}
+.wedge.go{opacity:1;transition:opacity .7s ease}
+.leadL{stroke:var(--fault);stroke-width:1;opacity:0}
+.leadL.go{opacity:.55;transition:opacity .5s ease}
+.craterlbl{font-family:var(--mono);font-size:13px;font-weight:500;fill:var(--fault)}
+
+/* decision graph */
+.graphwrap{margin:2px 0 0}
+.gedgeB{stroke:var(--hair);stroke-width:2;fill:none}
+.gedgeL{stroke:var(--fault);stroke-width:2;fill:none;stroke-dasharray:var(--len);stroke-dashoffset:var(--len)}
+.gedgeL.go{stroke-dashoffset:0;transition:stroke-dashoffset .45s ease}
+.gnode{opacity:.36;transition:opacity .45s ease}
+.gnode.done{opacity:1}
+.gbox{fill:var(--paper);stroke:var(--hair);stroke-width:1}
+.gnode.done .gbox{stroke:var(--ink)}
+.glabel{font-family:var(--mono);font-size:13px;fill:var(--muted);text-anchor:middle;letter-spacing:.02em}
+.gnode.done .glabel{fill:var(--ink)}
+.gring{fill:none;stroke:var(--fault);stroke-width:2;opacity:0;transition:opacity .4s ease}
+.gnode.active .gring{opacity:1}
+.gbranch{opacity:.42}
+.gbranchL{stroke:var(--muted);stroke-width:1.3;stroke-dasharray:3 3;fill:none}
+.gblabel{font-family:var(--mono);font-size:12px;fill:var(--muted);text-anchor:middle;letter-spacing:.04em}
+
+/* trace */
+.trace .lbl{margin-bottom:16px}
+.step{position:relative;padding:0 0 18px 58px;opacity:0;transform:translateY(8px)}
+.step.in{opacity:1;transform:none;transition:opacity .45s ease,transform .45s ease}
+.step:before{content:"";position:absolute;left:25px;top:7px;bottom:-2px;width:1px;background:var(--hair)}
+.step:last-child:before{display:none}
+.snum{position:absolute;left:0;top:0;width:50px;font-family:var(--mono);font-size:12px;color:var(--muted);text-align:left}
+.snum i{display:inline-block;width:11px;height:11px;border-radius:50%;background:var(--muted);margin-right:7px;vertical-align:-1px}
+.step.s-fault .snum i{background:var(--fault)}
+.step.s-ok .snum i{background:var(--healthy)}
+.stitle{font-size:16px;font-weight:500;letter-spacing:-.005em}
+.step.s-ok .stitle{color:var(--healthy)}
+.srat{font-size:15px;color:var(--muted);margin-top:3px;line-height:1.5;max-width:54ch}
+.sev{font-family:var(--mono);font-size:13px;color:var(--ink);letter-spacing:.01em;opacity:0}
+.step.resolved .sev{opacity:1;transition:opacity .4s ease}
+.sev .de{color:var(--muted)}
+.badge{float:right;font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--healthy);border:1px solid var(--healthy);border-radius:3px;padding:3px 8px;margin-top:-2px}
+
+/* proof */
+.proof{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--hair);border:1px solid var(--hair);border-radius:6px;overflow:hidden}
+.pcell{background:var(--paper);padding:18px 20px}
+.pcell .lbl{margin-bottom:11px}
+.peuro{font-family:var(--mono);font-size:38px;font-weight:500;letter-spacing:-.02em;line-height:1}
+.psub{font-family:var(--mono);font-size:13px;color:var(--muted);margin-top:8px}
+.agree{text-align:center;margin-top:16px}
+.agree b{display:inline-block;font-family:var(--mono);font-size:22px;font-weight:600;color:var(--healthy);transform:scale(.88);opacity:0}
+.agree.go b{transform:scale(1);opacity:1;transition:transform .45s cubic-bezier(.2,.7,.3,1),opacity .45s ease}
+.agree .x{font-size:13px;color:var(--muted);margin-top:6px;line-height:1.5}
+
+/* decision */
+.decision{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.dtext{font-size:16px;font-weight:500;letter-spacing:-.01em}
+.dtext .arrow{color:var(--fault);margin:0 4px}
+.roi{font-family:var(--mono);font-size:12px;letter-spacing:.06em;color:var(--muted);border:1px solid var(--hair);border-radius:3px;padding:6px 11px;white-space:nowrap}
+.roi b{color:var(--ink);font-weight:600}
+
+/* footer */
+.foot{font-family:var(--mono);font-size:12px;letter-spacing:.04em;color:var(--muted);line-height:1.7;margin-top:30px}
+
+/* landing + run trigger */
+.iheadline{font-family:var(--sans);font-size:21px;font-weight:500;letter-spacing:-.01em;color:var(--ink);text-align:center;max-width:28ch;line-height:1.3;opacity:0}
+.iheadline.show{opacity:1;transition:opacity .6s ease}
+.iheadline.hide{opacity:0;transition:opacity .35s ease}
+.icap.hide{opacity:0;transition:opacity .3s ease}
+.runbtn{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink);background:var(--paper);border:1px solid var(--ink);border-radius:6px;padding:11px 22px;cursor:pointer;opacity:0;transition:opacity .5s ease,background .2s ease,color .2s ease}
+.runbtn.show{opacity:1}
+.runbtn:hover{background:var(--ink);color:var(--paper)}
+.runbtn.hide{opacity:0;pointer-events:none;transition:opacity .35s ease}
+.tile.scan{opacity:.92;transform:scale(1.12);transition:opacity .14s ease,transform .14s ease}
+.tile.hit{background:var(--fault);opacity:1;transform:scale(1.16);transition:opacity .3s ease,transform .3s ease,background .3s ease}
+
+/* streaming step cue */
+.sevwrap{position:relative;margin-top:7px;min-height:15px}
+.think{position:absolute;top:0;left:0;font-family:var(--mono);font-size:13px;color:var(--muted);opacity:0}
+.step.working .think{opacity:1;transition:opacity .25s ease}
+.step.resolved .think{opacity:0}
+
+/* xgboost moment */
+.xgbzone{display:none}
+.xgbzone.show{display:block}
+.xgbcap{font-size:14px;color:var(--muted);letter-spacing:.02em;margin-top:6px;opacity:0}
+.xgbcap.go{opacity:1;transition:opacity .5s ease}
+.xgbnum{font-family:var(--mono);font-size:15px;font-weight:600;fill:var(--fault)}
+.xgbsub{font-family:var(--mono);font-size:12.5px;fill:var(--muted)}
+
+/* replay */
+.replay{position:absolute;top:0;right:0;font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);cursor:pointer;opacity:0;border-bottom:1px solid var(--hair)}
+.report.in .replay{opacity:1;transition:opacity .5s ease .3s}
+.replay:hover{color:var(--fault)}
+
+/* late-resolving zones */
+.post{opacity:0}
+.post.go{opacity:1;transition:opacity .5s ease}
+@media (max-width:520px){ .id{font-size:22px} .id .plant{font-size:17px} .proof{grid-template-columns:1fr} .peuro{font-size:30px} }
+@media (prefers-reduced-motion:reduce){ *{transition:none!important} }
+</style>
+</head>
+<body>
+<div id="intro">
+  <div class="grid65" id="grid65"></div>
+  <div class="iheadline" id="iheadline">65 inverters. One is silently losing money.</div>
+  <div class="icap" id="icap">Watch the agent find it.</div>
+  <button class="runbtn" id="runbtn">Run investigation</button>
+</div>
+
+<div class="report" id="report">
+  <a class="replay" id="replay">Replay</a>
+  <div class="head">
+    <div class="eyebrow">Incident Report</div>
+    <div class="id"><span id="invid"></span><span class="dot">/</span><span class="plant" id="plant">Plant A</span></div>
+    <div class="chip" id="chip"></div>
+  </div>
+
+  <hr class="rule">
+  <div class="lbl" style="margin-bottom:14px">Daily performance ratio - hero vs healthy fleet</div>
+  <div class="chartwrap"><svg id="chart" viewBox="0 0 680 300" role="img" aria-label="Performance ratio chart"></svg></div>
+
+  <hr class="rule">
+  <div class="lbl" style="margin-bottom:14px">The decision path</div>
+  <div class="graphwrap"><svg id="graph" viewBox="0 0 680 104" role="img" aria-label="Agent decision path"></svg></div>
+
+  <hr class="rule">
+  <div class="trace">
+    <div class="lbl">The investigation</div>
+    <div id="steps"></div>
+  </div>
+
+  <div id="xgbzone" class="xgbzone">
+  <hr class="rule">
+  <div class="lbl" style="margin-bottom:6px">Independent check - weather-model expected vs actual</div>
+  <div class="chartwrap"><svg id="xgb" viewBox="0 0 680 150" role="img" aria-label="Expected vs actual power"></svg></div>
+  <div class="xgbcap" id="xgbcap">A second, independent model predicts from weather alone what it should have produced.</div>
+  </div>
+
+  <hr class="rule post">
+  <div class="lbl post" style="margin-bottom:14px">Two independent loss estimates</div>
+  <div class="proof post">
+    <div class="pcell">
+      <div class="lbl">Bayesian &middot; siblings</div>
+      <div class="peuro" id="euroA"></div>
+      <div class="psub" id="euroAsub"></div>
+    </div>
+    <div class="pcell">
+      <div class="lbl">ML &middot; weather</div>
+      <div class="peuro" id="euroB"></div>
+      <div class="psub">deterministic</div>
+    </div>
+  </div>
+  <div class="agree post">
+    <b id="agree"></b>
+    <div class="x">Two independent methods. No shared assumptions.<br>The ML estimate falls inside the Bayesian interval.</div>
+  </div>
+
+  <hr class="rule post">
+  <div class="decision post">
+    <div class="dtext" id="dtext"></div>
+    <div class="roi" id="roi"></div>
+  </div>
+
+  <div class="foot post" id="foot"></div>
+  <div id="chat-mount"></div>
+</div>
+
+<script>
+const EMBEDDED = {"inverter_id": "INV 01.05.029", "window": {"start": "2019-05-24", "end": "2019-06-16"}, "status": "work_order_issued", "trace": [{"step": 1, "node": "observe", "title": "Scanning the inverter's recent output", "observation": "10 consecutive days at PR=0.0 while siblings held ~0.83", "decision": "fault", "rationale": "a 10-day flatline against healthy peers in the same weather is not noise - this inverter stopped producing", "status": "fault", "evidence": {"sustained_zero_days": 10, "hero_mean_pr": 0.46, "sibling_mean_pr": 0.83, "curtailment_fraction": 0.0}}, {"step": 2, "node": "triage", "title": "Ruling out grid / market curtailment", "observation": "plant at full setpoint (DV~100); only ~0% of daytime curtailed", "decision": "real_fault", "rationale": "the lost output is not explained by curtailment, so this is a genuine fault to diagnose", "status": "info", "evidence": {"curtailment_fraction": 0.0}}, {"step": 3, "node": "diagnose", "title": "Diagnosing the cause (AC vs DC side)", "observation": "P_AC ~0 for 10 consecutive days 2019-05-25..2019-06-03 while insolation normal (median 7.1 kWh/m2); U_DC present (~803 V, open-circuit) with I_DC~0 (0.13 A): panels healthy, inverter (AC side) failed", "decision": "DEAD_INVERTER/AC", "rationale": "U_DC present (~803 V, open-circuit) with I_DC~0 (0.13 A): panels healthy, inverter (AC side) failed", "status": "fault", "evidence": {"side": "AC", "confidence": 0.98, "u_dc_v": 803.0, "i_dc_a": 0.13, "u_dc_healthy_v": 696.0}}, {"step": 4, "node": "confirm", "title": "Cross-checking the inverter's own error log", "observation": "655626 (1947x in window): Erkennung von Netzunterspannung (ENS,Leistungsteil)", "decision": "confirmed", "rationale": "the inverter logged a grid / power-unit fault in the same window - independent agreement with the physics verdict", "status": "ok", "evidence": {"errorcode_corroboration": "655626 (1947x in window): Erkennung von Netzunterspannung (ENS,Leistungsteil)"}}, {"step": 5, "node": "quantify", "title": "Pricing the lost energy", "observation": "1692 kWh lost -> EUR 194.63 (95% CI EUR 160.65-230.45, causalimpact)", "decision": "EUR 194.63", "rationale": "counterfactual expected output minus actual over the window, priced at 0.115 EUR/kWh from the feed-in tariff", "status": "info", "evidence": {"lost_kwh": 1692.4, "euros_lost": 194.63, "euros_ci_low": 160.65, "euros_ci_high": 230.45, "tariff_eur_per_kwh": 0.115, "method": "causalimpact"}}, {"step": 6, "node": "validate", "title": "Validating against ENERPARC service tickets", "observation": "ticket 2019-05-24..2019-06-16: matched=True, affected_count_match=True", "decision": "MATCH", "rationale": "the detected outage overlaps a real maintenance ticket - ground truth, not a self-graded score", "status": "ok", "evidence": {"ticket_id": "2019-05-24..2019-06-16", "ticket_matched": true, "affected_count_match": true}}, {"step": 7, "node": "act", "title": "Issuing the work order", "observation": "Dispatch technician: inverter service/replacement (ROI 0.13x)", "decision": "work_order_issued", "rationale": "confirmed inverter failure with a quantified, ticket-validated loss - dispatch the technician", "status": "fault", "evidence": {"recommendation": "Dispatch technician: inverter service/replacement", "roi_multiple": 0.13}}], "result": {"inverter_id": "INV 01.05.029", "plant": "Plant A (Silmersdorf, 1.9 MWp, 65 inverters)", "window": {"start": "2019-05-24", "end": "2019-06-16"}, "detection": {"sustained_zero_pr_days": 10, "hero_mean_pr_fault": 0.078, "sibling_mean_pr": 0.83}, "cause": {"primary": "DEAD_INVERTER", "side": "AC", "confidence": 0.98}, "evidence": {"u_dc_v": 803.0, "i_dc_a": 0.13, "u_dc_healthy_v": 696.0, "errorcode": 655626, "errorcode_count": 1947, "errorcode_text": "Erkennung von Netzunterspannung (ENS,Leistungsteil)"}, "loss": {"lost_kwh": 1692.4, "euros_lost": 194.63, "euros_ci_low": 160.65, "euros_ci_high": 230.45, "tariff_eur_per_kwh": 0.115, "method": "causalimpact"}, "business_case": {"days_undetected_caught": 10, "projection_note": "PROJECTION not measured. 3.8 GW portfolio x 1-3% silent annual loss x tariff; capacity factor derived from Plant A 2021 actuals (0.087).", "portfolio_eur_per_year_low": 3345263.0, "portfolio_eur_per_year_high": 10035788.0}, "action": {"recommendation": "Dispatch technician: inverter service/replacement", "roi_multiple": 0.13, "intervention_cost_assumption_eur": 1500.0}, "validation": {"ticket_id": "2019-05-24..2019-06-16", "ticket_matched": true, "affected_count_match": true}, "chart_series": {"dates": ["2019-05-24", "2019-05-25", "2019-05-26", "2019-05-27", "2019-05-28", "2019-05-29", "2019-05-30", "2019-05-31", "2019-06-01", "2019-06-02", "2019-06-03", "2019-06-04", "2019-06-05", "2019-06-06", "2019-06-07", "2019-06-08", "2019-06-09", "2019-06-10", "2019-06-11", "2019-06-12", "2019-06-13", "2019-06-14", "2019-06-15", "2019-06-16"], "hero_pr": [0.536, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.397, 0.833, 0.829, 0.846, 0.855, 0.851, 0.852, 0.836, 0.836, 0.839, 0.84, 0.833, 0.85], "sibling_pr": [0.837, 0.878, 0.844, 0.828, 0.851, 0.859, 0.858, 0.828, 0.826, 0.832, 0.835, 0.802, 0.813, 0.81, 0.824, 0.836, 0.835, 0.823, 0.811, 0.811, 0.82, 0.824, 0.802, 0.824]}, "narration_plain": "INV 01.05.029 ran dead for 10 days (DEAD_INVERTER, AC side; inverter error 655626 'Erkennung von Netzunterspannung (ENS,Leistungsteil)'), losing about EUR 195 (95% CI EUR 161-230, causalimpact). This matches ENERPARC ticket 2019-05-24..2019-06-16. Recommended: Dispatch technician: inverter service/replacement.", "loss_cross_check": {"method": "xgboost_weather", "lost_kwh": 1757.8, "euros_lost": 202.15, "val_r2": 0.9261, "causalimpact_euros": 194.63, "agreement_pct": 96.3}}};
+const RM = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const eur = n => "EUR " + Math.round(n);
+const ALIAS={confirm:"diagnose", validate:"quantify"};
+const GLABEL={observe:"observe",triage:"triage",diagnose:"diagnose",quantify:"quantify",act:"act"};
+const mainNode = n => ALIAS[n] || n;
+let GRAPH_ORDER=[];
+let DATA=null;
+
+async function load(){
+  try{ const r = await fetch("agent_run.json",{cache:"no-store"}); if(!r.ok) throw 0; return await r.json(); }
+  catch(e){ return EMBEDDED; }
+}
+
+const HERO_IDX = 28; // INV 01.05.029's slot in the 65-tile fleet array (no layout map in the data; commented constant)
+function buildTiles(){
+  const grid = document.getElementById("grid65"); grid.innerHTML="";
+  for(let i=0;i<65;i++){ const t=document.createElement("div"); t.className="tile"; grid.appendChild(t); }
+}
+function setupLanding(){
+  const tiles=[...document.querySelectorAll(".tile")];
+  const show=id=>{ const e=document.getElementById(id); if(e) e.classList.add("show"); };
+  if(RM){ tiles.forEach(t=>t.classList.add("show")); ["iheadline","icap","runbtn"].forEach(show); }
+  else { tiles.forEach((t,i)=> setTimeout(()=>t.classList.add("show"), 40+i*6));
+    setTimeout(()=>["iheadline","icap","runbtn"].forEach(show), 480); }
+  document.getElementById("runbtn").addEventListener("click", onRun, {once:true});
+}
+function scanFind(heroId, days){
+  const tiles=[...document.querySelectorAll(".tile")];
+  const cap=document.getElementById("icap");
+  document.getElementById("runbtn").classList.add("hide");
+  document.getElementById("iheadline").classList.add("hide");
+  cap.textContent="Scanning 65 inverters...";
+  return new Promise(res=>{
+    tiles.forEach((t,i)=> setTimeout(()=>{ t.classList.add("scan");
+      setTimeout(()=>t.classList.remove("scan"),150); }, (i/tiles.length)*900));
+    setTimeout(()=>{ if(tiles[HERO_IDX]) tiles[HERO_IDX].classList.add("hit"); }, 980);
+    setTimeout(()=>{ cap.innerHTML=`Anomaly detected: <b>${heroId}</b> - ${days}-day silent failure`; }, 1080);
+    setTimeout(res, 1500);
+  });
+}
+
+function pathFor(vals, X, Y){ return vals.map((v,i)=> (i? "L":"M") + X(i).toFixed(1) + " " + Y(v).toFixed(1)).join(" "); }
+
+function buildChart(cs){
+  const svg = document.getElementById("chart");
+  const W=680,H=300,L=46,R=120,T=22,B=36, pw=W-L-R, ph=H-T-B, n=cs.hero_pr.length;
+  const X=i=> L + (i/(n-1))*pw, Y=v=> T + (1-v)*ph;
+  let s="";
+  // gridlines + y ticks
+  [0,0.25,0.5,0.75,1].forEach(v=>{ const y=Y(v).toFixed(1);
+    s+=`<line class="grL" x1="${L}" y1="${y}" x2="${L+pw}" y2="${y}"/>`;
+    s+=`<text class="tick" x="${L-9}" y="${(+y+3).toFixed(1)}" text-anchor="end">${v.toFixed(2)}</text>`; });
+  // x ticks (first/mid/last)
+  [0,(n-1>>1),n-1].forEach(i=>{ const d=cs.dates[i].slice(5);
+    s+=`<text class="tick" x="${X(i).toFixed(1)}" y="${T+ph+18}" text-anchor="middle">${d}</text>`; });
+  // crater geometry from the data
+  const zeros=cs.hero_pr.map((v,i)=>v===0?i:-1).filter(i=>i>=0);
+  let z = zeros.length? zeros[0] : 1;
+  const dead = zeros.length;
+  const lastZero = zeros.length? zeros[zeros.length-1] : z;
+  const wEnd = Math.min(lastZero+1, n-1);               // include the recovery rise
+  const midZero = zeros.length? zeros[Math.floor(zeros.length/2)] : z;
+  // lost-output wedge: fleet (top) minus dead hero (bottom) across the crater
+  let wp=`M ${X(0).toFixed(1)} ${Y(cs.sibling_pr[0]).toFixed(1)}`;
+  for(let i=1;i<=wEnd;i++) wp+=` L ${X(i).toFixed(1)} ${Y(cs.sibling_pr[i]).toFixed(1)}`;
+  for(let i=wEnd;i>=0;i--) wp+=` L ${X(i).toFixed(1)} ${Y(cs.hero_pr[i]).toFixed(1)}`;
+  wp+=" Z";
+  s+=`<path class="wedge" id="wedge" fill-opacity="0.07" d="${wp}"/>`;
+  // lines (fleet under, dead hero over)
+  s+=`<path class="ln lnSib draw" id="sib" d="${pathFor(cs.sibling_pr,X,Y)}"/>`;
+  s+=`<path class="ln lnHero draw" id="hero" d="${pathFor(cs.hero_pr,X,Y)}"/>`;
+  // marker dot at first zero
+  s+=`<circle class="mk fadeIn" id="mk" cx="${X(z).toFixed(1)}" cy="${Y(0).toFixed(1)}" r="3.4"/>`;
+  // "N days dead" pinned over the flat-zero stretch (bottom)
+  s+=`<text class="annot craterlbl fadeIn" id="annT" x="${X(midZero).toFixed(1)}" y="${(Y(0)-9).toFixed(1)}" text-anchor="middle">${dead} days dead</text>`;
+  // hero label at the crater (empty space), short leader down to the dead line
+  const lx=X(Math.min(midZero,3));
+  s+=`<line class="leadL fadeIn" id="leadL" x1="${lx.toFixed(1)}" y1="${Y(0.46).toFixed(1)}" x2="${lx.toFixed(1)}" y2="${(Y(0)-6).toFixed(1)}"/>`;
+  s+=`<text class="craterlbl fadeIn" id="lblH" x="${(lx+6).toFixed(1)}" y="${Y(0.53).toFixed(1)}">INV 01.05.029</text>`;
+  // only right-end label: healthy fleet
+  const syv=Y(cs.sibling_pr[n-1]);
+  s+=`<text class="endlbl fadeIn" id="lblS" x="${L+pw+8}" y="${(syv+3).toFixed(1)}" fill="var(--healthy)">healthy fleet</text>`;
+  svg.innerHTML=s;
+  ["sib","hero"].forEach(id=>{ const p=document.getElementById(id); p.style.setProperty("--len",p.getTotalLength()); });
+}
+
+function startChart(){
+  const fades=["mk","annT","leadL","lblH","lblS"];
+  if(RM){ ["sib","hero"].forEach(id=>document.getElementById(id).style.strokeDashoffset=0);
+    document.getElementById("wedge").classList.add("go");
+    fades.forEach(id=>document.getElementById(id).classList.add("go")); return; }
+  requestAnimationFrame(()=>{ document.getElementById("sib").classList.add("go");
+    setTimeout(()=>document.getElementById("hero").classList.add("go"),250);
+    setTimeout(()=>{ document.getElementById("wedge").classList.add("go");
+      fades.forEach(id=>document.getElementById(id).classList.add("go")); },1500); });
+}
+
+function sev(node, ev, R){
+  const e=R.evidence;
+  switch(node){
+    case "observe": return `${ev.sustained_zero_days} consecutive days at PR 0.0 <span class="de">/ fleet ~${R.detection.sibling_mean_pr} / hero ~${(+R.detection.hero_mean_pr_fault).toFixed(2)}</span>`;
+    case "triage": return `plant at full setpoint <span class="de">/ ${Math.round((ev.curtailment_fraction||0)*100)}% curtailed, not a throttle</span>`;
+    case "diagnose": return `U_DC ${e.u_dc_v} V open-circuit <span class="de">/</span> I_DC ${e.i_dc_a} A <span class="de">/</span> healthy peer ${e.u_dc_healthy_v} V`;
+    case "confirm": return `inverter error ${e.errorcode} &times;${e.errorcode_count} <span class="de">/ ${e.errorcode_text}</span>`;
+    case "quantify": return `${Math.round(ev.lost_kwh)} kWh &rarr; ${eur(ev.euros_lost)} <span class="de">(95% CI ${eur(ev.euros_ci_low)}&ndash;${Math.round(ev.euros_ci_high)})</span>`;
+    case "validate": return `ticket ${ev.ticket_id} <span class="de">/ overlap confirmed</span>`;
+    case "act": return `${ev.recommendation}`;
+    default: return "";
+  }
+}
+
+function buildSteps(TR, R){
+  const wrap=document.getElementById("steps"); wrap.innerHTML="";
+  TR.forEach(s=>{
+    const cls = s.status==="fault" ? "s-fault" : (s.status==="ok" ? "s-ok" : "s-info");
+    const d=document.createElement("div"); d.className="step "+cls;
+    const match = (s.node==="validate" && R.validation.ticket_matched) ? `<span class="badge">Match</span>` : "";
+    d.innerHTML = `${match}<div class="snum"><i></i>${String(s.step).padStart(2,"0")}</div>`
+      + `<div class="stitle">${s.title}</div>`
+      + `<div class="srat">${s.rationale}</div>`
+      + `<div class="sevwrap"><div class="think">analyzing&hellip;</div>`
+      + `<div class="sev">${sev(s.node, s.evidence||{}, R)}</div></div>`;
+    wrap.appendChild(d);
+  });
+}
+function revealSteps(TR){
+  const steps=[...document.querySelectorAll(".step")];
+  if(RM){ steps.forEach(s=>s.classList.add("in")); return; }
+  steps.forEach((s,i)=> setTimeout(()=>{ s.classList.add("in"); const t=TR[i]; if(t) lightNode(mainNode(t.node), t.status); }, 300 + i*560));
+}
+
+function buildGraph(TR){
+  const svg=document.getElementById("graph");
+  const order=[]; TR.forEach(t=>{ const m=mainNode(t.node); if(!order.includes(m)) order.push(m); });
+  const N=order.length, W=680, padX=20, top=30, bh=30, slot=(W-2*padX)/N;
+  const cx=i=> padX + slot*i + slot/2, bw=Math.min(slot-16,104);
+  let s="";
+  for(let i=1;i<N;i++){ const x1=cx(i-1)+bw/2, x2=cx(i)-bw/2, y=top+bh/2;
+    s+=`<line class="gedgeB" x1="${x1.toFixed(1)}" y1="${y}" x2="${x2.toFixed(1)}" y2="${y}"/>`;
+    s+=`<line class="gedgeL" id="ge-${i}" x1="${x1.toFixed(1)}" y1="${y}" x2="${x2.toFixed(1)}" y2="${y}"/>`; }
+  // dead-end branches: greyed because the run did NOT exit here (read status/decision from the trace)
+  const oStep=TR.find(t=>t.node==="observe"), tStep=TR.find(t=>t.node==="triage");
+  const obsExit=!!(oStep && oStep.status==="healthy");
+  const triExit=!!(tStep && /curtail/i.test(tStep.decision||""));
+  const branch=(label,idx,muted)=>{ if(idx<0) return "";
+    const x=cx(idx), y0=top+bh, y1=top+bh+20, op=muted?0.42:1;
+    return `<g class="gbranch" style="opacity:${op}"><line class="gbranchL" x1="${x.toFixed(1)}" y1="${y0}" x2="${x.toFixed(1)}" y2="${y1}"/>`
+      +`<text class="gblabel" x="${x.toFixed(1)}" y="${(y1+11).toFixed(1)}">${label}</text></g>`; };
+  s+=branch("healthy -> exit", order.indexOf("observe"), !obsExit);
+  s+=branch("curtailment -> exit", order.indexOf("triage"), !triExit);
+  order.forEach((name,i)=>{ const x=cx(i), y=top, rx=x-bw/2;
+    s+=`<g class="gnode" id="gn-${name}">`
+      +`<rect class="gring" x="${(rx-3).toFixed(1)}" y="${y-3}" width="${bw+6}" height="${bh+6}" rx="5"/>`
+      +`<rect class="gbox" x="${rx.toFixed(1)}" y="${y}" width="${bw}" height="${bh}" rx="3"/>`
+      +`<text class="glabel" x="${x.toFixed(1)}" y="${(y+bh/2+4).toFixed(1)}">${GLABEL[name]||name}</text></g>`; });
+  svg.setAttribute("viewBox",`0 0 ${W} ${top+bh+44}`);
+  svg.innerHTML=s;
+  for(let i=1;i<N;i++){ const p=document.getElementById("ge-"+i); if(p) p.style.setProperty("--len", p.getTotalLength()); }
+  return order;
+}
+function lightNode(name, status){
+  const g=document.getElementById("gn-"+name); if(!g) return;
+  const i=GRAPH_ORDER.indexOf(name);
+  if(i>0){ const e=document.getElementById("ge-"+i); if(e) e.classList.add("go"); }
+  document.querySelectorAll(".gnode.active").forEach(x=>x.classList.remove("active"));
+  const ring=g.querySelector(".gring");
+  if(ring) ring.setAttribute("stroke", (status==="ok"||status==="info")?"var(--healthy)":"var(--fault)");
+  g.classList.add("done","active");
+}
+function startGraphRM(){
+  GRAPH_ORDER.forEach((name,i)=>{ const g=document.getElementById("gn-"+name); if(g) g.classList.add("done");
+    if(i>0){ const e=document.getElementById("ge-"+i); if(e) e.classList.add("go"); } });
+  const last=GRAPH_ORDER[GRAPH_ORDER.length-1], g=document.getElementById("gn-"+last);
+  if(g){ g.classList.add("active"); const r=g.querySelector(".gring"); if(r) r.setAttribute("stroke","var(--fault)"); }
+}
+function build(data){
+  const R=data.result, TR=data.trace;
+  document.getElementById("invid").textContent = R.inverter_id;
+  document.getElementById("chip").innerHTML = `${R.cause.primary.replace("_"," ")} &middot; ${R.cause.side} side`
+    + `<span class="conf">conf ${R.cause.confidence}</span>`;
+  document.getElementById("euroA").textContent = eur(R.loss.euros_lost);
+  document.getElementById("euroAsub").textContent = `95% CI ${eur(R.loss.euros_ci_low)}-${Math.round(R.loss.euros_ci_high)}`;
+  document.getElementById("euroB").textContent = eur(R.loss_cross_check.euros_lost);
+  document.getElementById("agree").textContent = `${R.loss_cross_check.agreement_pct}% agreement`;
+  document.getElementById("dtext").innerHTML = `<span class="arrow">&rarr;</span>${R.action.recommendation}`;
+  document.getElementById("roi").innerHTML = `ROI <b>${R.action.roi_multiple}&times;</b>`;
+  const v=R.validation.ticket_id.split("..")[0];
+  document.getElementById("foot").textContent = `${R.plant} - validated against ENERPARC ticket ${v}`;
+  buildChart(R.chart_series);
+  buildXgb(R.chart_series, R.loss_cross_check);
+  buildSteps(TR, R);
+  GRAPH_ORDER = buildGraph(TR);
+}
+function buildXgb(cs, lcc){
+  const svg=document.getElementById("xgb");
+  const W=680,H=150,L=46,R=120,T=14,B=24, pw=W-L-R, ph=H-T-B, n=cs.hero_pr.length;
+  const X=i=>L+(i/(n-1))*pw, Y=v=>T+(1-v)*ph;
+  let s="";
+  [0,1].forEach(v=>{ const y=Y(v).toFixed(1); s+=`<line class="grL" x1="${L}" y1="${y}" x2="${L+pw}" y2="${y}"/>`; });
+  let wp=`M ${X(0).toFixed(1)} ${Y(cs.sibling_pr[0]).toFixed(1)}`;
+  for(let i=1;i<n;i++) wp+=` L ${X(i).toFixed(1)} ${Y(cs.sibling_pr[i]).toFixed(1)}`;
+  for(let i=n-1;i>=0;i--) wp+=` L ${X(i).toFixed(1)} ${Y(cs.hero_pr[i]).toFixed(1)}`;
+  wp+=" Z";
+  s+=`<path class="wedge" id="xwedge" fill-opacity="0.07" d="${wp}"/>`;
+  s+=`<path class="ln lnSib draw" id="xexp" d="${pathFor(cs.sibling_pr,X,Y)}"/>`;
+  s+=`<path class="ln lnHero draw" id="xact" d="${pathFor(cs.hero_pr,X,Y)}"/>`;
+  s+=`<text class="endlbl fadeIn" id="xlblE" x="${X(0.3).toFixed(1)}" y="${Y(0.97).toFixed(1)}" fill="var(--healthy)">weather-model expected</text>`;
+  s+=`<text class="endlbl fadeIn" id="xlblA" x="${X(2.4).toFixed(1)}" y="${Y(0.2).toFixed(1)}" fill="var(--fault)">actual</text>`;
+  // real XGB numbers in the gap (read from loss_cross_check; not hardcoded)
+  s+=`<text class="xgbnum fadeIn" id="xgbcall1" x="${X(3.2).toFixed(1)}" y="${Y(0.63).toFixed(1)}">${eur(lcc.euros_lost)} lost</text>`;
+  s+=`<text class="xgbsub fadeIn" id="xgbcall2" x="${X(3.2).toFixed(1)}" y="${Y(0.48).toFixed(1)}">${Math.round(lcc.lost_kwh).toLocaleString("en-US")} kWh weather-expected, 0 actual</text>`;
+  svg.innerHTML=s;
+}
+function revealXgb(instant){
+  const z=document.getElementById("xgbzone"); if(z) z.classList.add("show");
+  ["xexp","xact"].forEach(id=>{ const p=document.getElementById(id); if(p) p.style.setProperty("--len", p.getTotalLength()); });
+  const extras=()=>["xwedge","xlblE","xlblA","xgbcap","xgbcall1","xgbcall2"].forEach(id=>{ const e=document.getElementById(id); if(e) e.classList.add("go"); });
+  if(instant||RM){ ["xexp","xact"].forEach(id=>{ const e=document.getElementById(id); if(e) e.style.strokeDashoffset=0; }); extras(); return; }
+  requestAnimationFrame(()=>{ const a=document.getElementById("xexp"); if(a) a.classList.add("go");
+    setTimeout(()=>{ const b=document.getElementById("xact"); if(b) b.classList.add("go"); },250);
+    setTimeout(extras,1100); });
+}
+function streamSteps(TR){
+  const steps=[...document.querySelectorAll(".step")];
+  steps.forEach((st,i)=>{
+    setTimeout(()=>{
+      st.classList.add("in","working");
+      const t=TR[i]; if(t) lightNode(mainNode(t.node), t.status);
+      setTimeout(()=>{ st.classList.remove("working"); st.classList.add("resolved");
+        if(t && t.node==="quantify") revealXgb(false); }, 250);
+      if(i===steps.length-1) setTimeout(revealPost, 480);
+    }, i*700);
+  });
+}
+function revealPost(){ document.querySelectorAll(".post").forEach(e=>e.classList.add("go")); }
+function playInvestigation(){
+  document.getElementById("report").classList.add("in");
+  startChart();
+  setTimeout(()=>streamSteps(DATA.trace), 900);
+}
+function onRun(){
+  const R=DATA.result, days=(R.detection && R.detection.sustained_zero_pr_days) || 10;
+  scanFind(R.inverter_id, days).then(()=>{
+    document.getElementById("intro").classList.add("out");
+    setTimeout(()=>{ document.getElementById("intro").style.display="none"; }, 600);
+    playInvestigation();
+  });
+}
+function showFinal(){
+  document.getElementById("report").classList.add("in");
+  ["sib","hero"].forEach(id=>{ const e=document.getElementById(id); if(e) e.style.strokeDashoffset=0; });
+  document.getElementById("wedge").classList.add("go");
+  ["mk","annT","leadL","lblH","lblS"].forEach(id=>{ const e=document.getElementById(id); if(e) e.classList.add("go"); });
+  startGraphRM();
+  [...document.querySelectorAll(".step")].forEach(s=>s.classList.add("in","resolved"));
+  revealXgb(true);
+  revealPost();
+}
+function replay(){
+  document.getElementById("report").classList.remove("in");
+  document.getElementById("xgbzone").classList.remove("show");
+  document.querySelectorAll(".post").forEach(e=>e.classList.remove("go"));
+  const intro=document.getElementById("intro");
+  intro.style.display=""; intro.classList.remove("out");
+  ["runbtn","iheadline","icap"].forEach(id=>document.getElementById(id).classList.remove("hide","show"));
+  document.getElementById("icap").innerHTML="Watch the agent find it.";
+  document.querySelectorAll(".tile").forEach(t=>t.classList.remove("hit","scan","show"));
+  build(DATA);
+  setupLanding();
+}
+
+function init(d){
+  DATA=d; buildTiles(); build(d);
+  const rp=document.getElementById("replay"); if(rp) rp.addEventListener("click", replay);
+  const auto = RM || /[?&]auto=1/.test(location.search);
+  if(auto){ document.getElementById("intro").style.display="none"; showFinal(); }
+  else setupLanding();
+}
+load().then(init);
+</script>
+</body>
+</html>
